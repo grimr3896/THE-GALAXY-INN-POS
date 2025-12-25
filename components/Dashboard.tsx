@@ -137,7 +137,7 @@ const Dashboard: React.FC<DashboardProps> = ({ sales, products, expenses, audits
 
       {/* Graphs Section */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        <div className="lg:col-span-2 bg-white p-8 rounded-[2.5rem] border border-slate-200 shadow-sm">
+        <div className="lg:col-span-2 bg-white p-8 rounded-[2.5rem] border border-slate-200 shadow-sm overflow-hidden">
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
             <div>
               <h4 className="text-lg font-black text-black uppercase tracking-tight">Revenue Trend</h4>
@@ -174,8 +174,8 @@ const Dashboard: React.FC<DashboardProps> = ({ sales, products, expenses, audits
               </div>
             </div>
           </div>
-          <div className="h-[300px] w-full">
-            <ResponsiveContainer width="100%" height="100%">
+          <div className="h-[300px] w-full relative min-h-[300px]">
+            <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
               <LineChart data={chartData}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                 <XAxis 
@@ -208,11 +208,11 @@ const Dashboard: React.FC<DashboardProps> = ({ sales, products, expenses, audits
           </div>
         </div>
 
-        <div className="bg-white p-8 rounded-[2.5rem] border border-slate-200 shadow-sm">
+        <div className="bg-white p-8 rounded-[2.5rem] border border-slate-200 shadow-sm overflow-hidden">
           <h4 className="text-lg font-black text-black uppercase tracking-tight mb-2">Categories</h4>
           <p className="text-[10px] font-bold uppercase tracking-widest opacity-40 mb-8">Performance by Type</p>
-          <div className="h-[300px] w-full">
-            <ResponsiveContainer width="100%" height="100%">
+          <div className="h-[300px] w-full relative min-h-[300px]">
+            <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
               <BarChart data={categoryData} layout="vertical">
                 <XAxis type="number" hide />
                 <YAxis 

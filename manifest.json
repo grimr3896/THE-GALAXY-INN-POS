@@ -1,0 +1,22 @@
+
+{
+  "name": "Galaxy Inn POS",
+  "short_name": "GalaxyPOS",
+  "description": "Secure Offline Point of Sale",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#4f46e5",
+  "icons": [
+    {
+      "src": "https://picsum.photos/seed/galaxy/192",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "https://picsum.photos/seed/galaxy/512",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

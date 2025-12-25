@@ -15,7 +15,7 @@ import AuthModal from './components/AuthModal';
 
 const TabIcons: Record<Tab, React.ReactNode> = {
   dashboard: <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/></svg>,
-  pos: <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="8" cy="21" r="1"/><circle cx="19" cy="21" r="1"/><path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12"/></svg>,
+  pos: <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="8" cy="21" r="1"/><circle cx="19" cy="21" r="1"/><path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 2 1.57l1.65-7.43H5.12"/></svg>,
   inventory: <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m7.5 4.27 9 5.15"/><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg>,
   history: <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></svg>,
   expenses: <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1-2-1Z"/><path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8"/><path d="M12 17.5V6.5"/></svg>,
@@ -29,6 +29,8 @@ const App: React.FC = () => {
   const store = useStore();
   const [activeTab, setActiveTab] = useState<Tab>('dashboard');
   const [loading, setLoading] = useState(true);
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
+  const [isPersistent, setIsPersistent] = useState(false);
 
   const [products, setProducts] = useState<Product[]>([]);
   const [sales, setSales] = useState<Sale[]>([]);
@@ -39,12 +41,20 @@ const App: React.FC = () => {
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [currentShift, setCurrentShift] = useState<DayShift | null>(null);
 
-  // Auth Gate state
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [pendingTab, setPendingTab] = useState<Tab | null>(null);
 
   const initData = async () => {
     try {
+      // Request Storage Persistence
+      if (navigator.storage && navigator.storage.persist) {
+        const persistent = await navigator.storage.persist();
+        setIsPersistent(persistent);
+        if (!persistent) {
+          console.warn("Storage is NOT persistent. Browser may clear data if disk is full.");
+        }
+      }
+
       const data = await store.loadAll();
       setProducts(data.products);
       setSales(data.sales);
@@ -62,6 +72,14 @@ const App: React.FC = () => {
 
   useEffect(() => {
     initData();
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
   }, []);
 
   const handleTabClick = (tab: Tab) => {
@@ -144,7 +162,7 @@ const App: React.FC = () => {
       <div className="h-screen w-screen flex items-center justify-center bg-slate-900 text-white">
         <div className="text-center space-y-4">
           <div className="w-16 h-16 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto"></div>
-          <p className="text-indigo-400 font-black uppercase tracking-widest text-xs">OFFLINE SECURE INIT...</p>
+          <p className="text-indigo-400 font-black uppercase tracking-widest text-xs">Accessing Local Computer Storage...</p>
         </div>
       </div>
     );
@@ -155,8 +173,8 @@ const App: React.FC = () => {
       {/* Sidebar */}
       <div className="w-64 bg-slate-900 text-white flex flex-col shadow-2xl relative z-30">
         <div className="p-8 text-white">
-          <h1 className="text-2xl font-black tracking-tighter text-indigo-400">GALAXY INN</h1>
-          <p className="text-[10px] text-slate-500 uppercase font-bold tracking-[0.2em] mt-1">Standalone Offline POS</p>
+          <h1 className="text-2xl font-black tracking-tighter text-indigo-400 uppercase leading-none">Galaxy Inn</h1>
+          <p className="text-[9px] text-slate-500 uppercase font-bold tracking-[0.1em] mt-2">Local Hard Drive Database</p>
         </div>
         <nav className="flex-1 px-4 space-y-1 overflow-y-auto pb-4">
           {(Object.keys(TabIcons) as Tab[]).map((tab) => {
@@ -178,15 +196,21 @@ const App: React.FC = () => {
             );
           })}
         </nav>
-        <div className="p-4 border-t border-slate-800">
+        <div className="p-4 border-t border-slate-800 space-y-3">
           <div className="flex items-center space-x-3 p-3 bg-slate-800/50 rounded-xl">
             <div className="w-8 h-8 rounded-full bg-indigo-500 flex items-center justify-center font-bold text-xs uppercase shadow-sm">AD</div>
             <div className="flex-1 overflow-hidden">
               <p className="text-xs font-black truncate uppercase tracking-tighter">Administrator</p>
               <div className="flex items-center space-x-1">
                 <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full"></div>
-                <p className="text-[10px] text-emerald-400 font-bold uppercase tracking-widest">Local Integrity OK</p>
+                <p className="text-[10px] text-emerald-400 font-bold uppercase tracking-widest">Local Drive Active</p>
               </div>
+            </div>
+          </div>
+          <div className="px-3 flex items-center justify-between opacity-60">
+            <span className="text-[7px] font-black uppercase tracking-widest text-slate-400">Persistence Status</span>
+            <div className={`flex items-center space-x-1 px-1.5 py-0.5 rounded border ${isPersistent ? 'border-emerald-500/20 text-emerald-400' : 'border-amber-500/20 text-amber-400'}`}>
+               <span className="text-[7px] font-black uppercase">{isPersistent ? 'PERMANENT' : 'BEST EFFORT'}</span>
             </div>
           </div>
         </div>

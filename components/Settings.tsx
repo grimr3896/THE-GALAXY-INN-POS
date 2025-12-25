@@ -1,5 +1,5 @@
 
-import React, { useRef } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import { AppSettings, Sale, Product, Expense, CashUp, Employee, Tab } from '../types';
 import { useStore } from '../store';
 
@@ -18,6 +18,18 @@ const Settings: React.FC<SettingsProps> = ({ settings, onUpdateSettings, sales, 
   const tabs: Tab[] = ['dashboard', 'pos', 'inventory', 'history', 'expenses', 'cashup', 'reports', 'employees', 'settings'];
   const store = useStore();
   const restoreInputRef = useRef<HTMLInputElement>(null);
+  const [storageEstimate, setStorageEstimate] = useState<{usage: number, quota: number} | null>(null);
+
+  useEffect(() => {
+    if (navigator.storage && navigator.storage.estimate) {
+        navigator.storage.estimate().then(estimate => {
+            setStorageEstimate({
+                usage: estimate.usage || 0,
+                quota: estimate.quota || 0
+            });
+        });
+    }
+  }, []);
 
   const toggleTabLock = (tab: Tab) => {
     const isLocked = settings.lockedTabs.includes(tab);
@@ -30,13 +42,13 @@ const Settings: React.FC<SettingsProps> = ({ settings, onUpdateSettings, sales, 
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
-    link.href = url; link.download = `backup_${new Date().toISOString().split('T')[0]}.json`;
+    link.href = url; link.download = `galaxy_full_backup_${new Date().toISOString().split('T')[0]}.json`;
     link.click(); URL.revokeObjectURL(url);
   };
 
   const handleRestore = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file || !confirm("RESTORE WARNING: This will overwrite your local database with the backup file data. This cannot be undone. Proceed?")) return;
+    if (!file || !confirm("RESTORE WARNING: This will overwrite your current computer database with the backup file data. Proceed?")) return;
     const reader = new FileReader();
     reader.onload = async (event) => {
       try {
@@ -49,27 +61,35 @@ const Settings: React.FC<SettingsProps> = ({ settings, onUpdateSettings, sales, 
         if (data.cashups) await store.saveCashUps(data.cashups);
         if (data.employees) await store.saveEmployees(data.employees);
         await onReloadData();
-        alert("RESTORE SUCCESSFUL: System state refreshed.");
-      } catch (err) { alert("RESTORE FAILED: The backup file is corrupted or incompatible."); }
+        alert("RESTORE SUCCESSFUL: Local database state refreshed.");
+      } catch (err) { alert("RESTORE FAILED: Invalid backup file."); }
     };
     reader.readAsText(file);
+  };
+
+  const formatSize = (bytes: number) => {
+    if (bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
   };
 
   return (
     <div className="p-8 max-w-6xl mx-auto space-y-12 pb-20 bg-slate-50 min-h-full text-black font-black">
       <div className="flex justify-between items-center border-b border-slate-200 pb-8">
         <div>
-          <h2 className="text-3xl font-black text-black uppercase tracking-tighter">System Configuration</h2>
-          <p className="text-black font-bold text-xs uppercase tracking-widest mt-1 opacity-60">Admin Access Only</p>
+          <h2 className="text-3xl font-black text-black uppercase tracking-tighter">Computer Storage Config</h2>
+          <p className="text-black font-bold text-xs uppercase tracking-widest mt-1 opacity-60">Manage your local physical database</p>
         </div>
-        <button onClick={() => onUpdateSettings(settings)} className="bg-black text-white px-10 py-4 rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl hover:bg-slate-800 transition">Apply Changes</button>
+        <button onClick={() => onUpdateSettings(settings)} className="bg-black text-white px-10 py-4 rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl hover:bg-slate-800 transition">Save Changes</button>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
         <section className="space-y-6">
           <div className="flex items-center space-x-3 mb-2">
             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.1a2 2 0 0 1-1-1.72v-.51a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/></svg>
-            <h3 className="text-xl uppercase tracking-tight">App Identity</h3>
+            <h3 className="text-xl uppercase tracking-tight">Identity & Security</h3>
           </div>
           <div className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-200 space-y-8">
             <div>
@@ -81,7 +101,7 @@ const Settings: React.FC<SettingsProps> = ({ settings, onUpdateSettings, sales, 
               />
             </div>
             <div>
-              <label className="block text-[10px] uppercase tracking-widest mb-3 opacity-40">Administrator PIN (4 Digits)</label>
+              <label className="block text-[10px] uppercase tracking-widest mb-3 opacity-40">Administrator PIN</label>
               <input 
                 type="password" value={settings.adminPin} 
                 onChange={(e) => onUpdateSettings({...settings, adminPin: e.target.value.slice(0, 4)})} 
@@ -90,21 +110,38 @@ const Settings: React.FC<SettingsProps> = ({ settings, onUpdateSettings, sales, 
               />
             </div>
           </div>
+
+          <div className="flex items-center space-x-3 mt-10 mb-2">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M22 12c0 6-4.39 10-10 10S2 18 2 12 6.39 2 12 2s10 4.39 10 10z"/><path d="M12 17v-5"/><path d="M12 7h.01"/></svg>
+            <h3 className="text-xl uppercase tracking-tight">Storage Health</h3>
+          </div>
+          <div className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-200 space-y-4">
+             <div className="flex justify-between items-center text-xs">
+                <span className="opacity-40 uppercase tracking-widest">Physical Disk Usage</span>
+                <span>{storageEstimate ? formatSize(storageEstimate.usage) : 'Calculating...'}</span>
+             </div>
+             <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
+                <div 
+                  className="bg-indigo-600 h-full transition-all duration-500" 
+                  style={{ width: `${storageEstimate ? (storageEstimate.usage / (storageEstimate.quota || 1)) * 100 : 0}%` }}
+                ></div>
+             </div>
+             <p className="text-[9px] uppercase tracking-widest opacity-30">Your database is stored directly on this computer's hard drive and is accessible fully offline.</p>
+          </div>
         </section>
 
         <section className="space-y-6">
           <div className="flex items-center space-x-3 mb-2">
             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-            <h3 className="text-xl uppercase tracking-tight">Security Access Locks</h3>
+            <h3 className="text-xl uppercase tracking-tight">Module Locks</h3>
           </div>
           <div className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-200 space-y-6">
-            <p className="text-[10px] uppercase tracking-widest opacity-40 mb-2">Toggle locks to require PIN for specific modules.</p>
             <div className="divide-y divide-slate-100 border border-slate-100 rounded-2xl overflow-hidden">
               {tabs.map(tab => (
                 <div key={tab} className="flex justify-between items-center px-6 py-4 bg-white hover:bg-slate-50 transition">
                   <div className="flex flex-col">
                     <span className="text-xs uppercase tracking-tight font-black">{tab === 'pos' ? 'Point of Sale' : tab}</span>
-                    <span className="text-[8px] opacity-40 uppercase tracking-widest">{settings.lockedTabs.includes(tab) ? 'Currently Locked' : 'Public Access'}</span>
+                    <span className="text-[8px] opacity-40 uppercase tracking-widest">{settings.lockedTabs.includes(tab) ? 'PIN Required' : 'No Lock'}</span>
                   </div>
                   <button 
                     onClick={() => toggleTabLock(tab)} 
@@ -121,12 +158,12 @@ const Settings: React.FC<SettingsProps> = ({ settings, onUpdateSettings, sales, 
         <section className="space-y-6 lg:col-span-2">
             <div className="flex items-center justify-center space-x-3 mb-2">
               <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg>
-              <h3 className="text-xl uppercase tracking-tight">Database Recovery & Backups</h3>
+              <h3 className="text-xl uppercase tracking-tight">External Data Export</h3>
             </div>
             <div className="flex flex-col sm:flex-row gap-6">
                 <button onClick={handleBackup} className="flex-1 py-12 bg-black text-white rounded-[3rem] font-black uppercase text-xs tracking-widest hover:bg-slate-800 transition shadow-xl flex flex-col items-center justify-center space-y-3">
                   <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
-                  <span>Download Full System Backup</span>
+                  <span>Save Copy to Disk</span>
                 </button>
                 <div 
                   onClick={() => restoreInputRef.current?.click()} 
@@ -134,7 +171,7 @@ const Settings: React.FC<SettingsProps> = ({ settings, onUpdateSettings, sales, 
                 >
                     <input type="file" ref={restoreInputRef} onChange={handleRestore} className="hidden" accept=".json" />
                     <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="opacity-20"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg>
-                    <span className="opacity-60">Upload & Restore Database</span>
+                    <span className="opacity-60">Restore Data from File</span>
                 </div>
             </div>
         </section>
