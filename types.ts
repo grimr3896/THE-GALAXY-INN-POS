@@ -7,11 +7,11 @@ export interface Product {
   category: 'bottle' | 'drum';
   image: string;
   buyPrice: number;
-  sellPrice: number; // For bottles
-  drumPrices?: { [key: string]: number }; // e.g., { '50ml': 5, '500ml': 40, '1000ml': 75 }
-  stock: number; // For bottles
-  capacity?: number; // For drums in ml (e.g. 50000)
-  currentLevel?: number; // For drums in ml
+  sellPrice: number;
+  drumPrices?: { [key: string]: number };
+  stock: number;
+  capacity?: number;
+  currentLevel?: number;
   minThreshold: number;
 }
 
@@ -22,7 +22,7 @@ export interface SaleItem {
   quantity: number;
   price: number;
   type: 'bottle' | 'drum-pour';
-  volume?: number; // in ml
+  volume?: number;
 }
 
 export interface Sale {
@@ -38,6 +38,15 @@ export interface Sale {
   };
   cashierId: string;
   vatAmount?: number;
+}
+
+export interface AuditLog {
+  id: string;
+  timestamp: number;
+  action: string;
+  details: string;
+  userId: string;
+  severity: 'info' | 'warning' | 'critical';
 }
 
 export interface Expense {
@@ -69,7 +78,15 @@ export interface Employee {
   pin: string;
 }
 
+export interface DayShift {
+  id: string;
+  isClosed: boolean;
+  closedAt?: number;
+}
+
+// Added optional id to match IndexedDB keyPath requirements
 export interface AppSettings {
+  id?: string;
   storeName: string;
   adminPin: string;
   lockedTabs: Tab[];

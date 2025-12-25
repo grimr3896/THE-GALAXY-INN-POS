@@ -7,10 +7,11 @@
     <title>Galaxy Inn POS</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-      @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+      @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
       body {
         font-family: 'Inter', sans-serif;
         background-color: #f8fafc;
+        color: #000000;
       }
       .drum-empty-banner {
         transform: rotate(-45deg);
@@ -23,11 +24,15 @@
         background: #f1f1f1;
       }
       ::-webkit-scrollbar-thumb {
-        background: #cbd5e1;
+        background: #000000;
         border-radius: 10px;
       }
       ::-webkit-scrollbar-thumb:hover {
-        background: #94a3b8;
+        background: #333333;
+      }
+      /* Ensure inputs and selects default to black text */
+      input, select, textarea {
+        color: #000000 !important;
       }
     </style>
 <script type="importmap">

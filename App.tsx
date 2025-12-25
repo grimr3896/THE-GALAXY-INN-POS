@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useStore } from './store';
-import { Tab, Product, Sale, Employee, AppSettings, Expense, CashUp } from './types';
+import { Tab, Product, Sale, Employee, AppSettings, Expense, CashUp, DayShift, AuditLog } from './types';
 import Dashboard from './components/Dashboard';
 import POS from './components/POS';
 import Inventory from './components/Inventory';
@@ -34,7 +34,13 @@ const App: React.FC = () => {
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [cashups, setCashUps] = useState<CashUp[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
+  const [audits, setAudits] = useState<AuditLog[]>([]);
   const [settings, setSettings] = useState<AppSettings | null>(null);
+  const [currentShift, setCurrentShift] = useState<DayShift | null>(null);
+
+  // Auth Gate state
+  const [showAuthModal, setShowAuthModal] = useState(false);
+  const [pendingTab, setPendingTab] = useState<Tab | null>(null);
 
   const initData = async () => {
     try {
@@ -44,7 +50,9 @@ const App: React.FC = () => {
       setExpenses(data.expenses);
       setCashUps(data.cashups);
       setEmployees(data.employees);
+      setAudits(data.audits);
       setSettings(data.settings);
+      setCurrentShift(data.currentShift);
       setLoading(false);
     } catch (err) {
       console.error("Failed to load local DB", err);
@@ -55,30 +63,41 @@ const App: React.FC = () => {
     initData();
   }, []);
 
-  if (loading || !settings) {
-    return (
-      <div className="h-screen w-screen flex items-center justify-center bg-slate-900">
-        <div className="text-center space-y-4">
-          <div className="w-16 h-16 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto"></div>
-          <p className="text-indigo-400 font-black uppercase tracking-widest text-xs">Initializing Galaxy Inn DB...</p>
-        </div>
-      </div>
-    );
-  }
+  const handleTabClick = (tab: Tab) => {
+    if (settings?.lockedTabs.includes(tab)) {
+      setPendingTab(tab);
+      setShowAuthModal(true);
+    } else {
+      setActiveTab(tab);
+    }
+  };
+
+  const handleAuthSuccess = () => {
+    if (pendingTab) {
+      setActiveTab(pendingTab);
+    }
+    setShowAuthModal(false);
+    setPendingTab(null);
+  };
+
+  const logAction = (action: string, details: string, severity: AuditLog['severity'] = 'info') => {
+    const log: AuditLog = {
+      id: `LOG-${Date.now()}`,
+      timestamp: Date.now(),
+      action,
+      details,
+      userId: 'admin',
+      severity
+    };
+    setAudits(prev => [log, ...prev].slice(0, 100));
+    store.saveAudit(log);
+  };
 
   const handleUpdateProduct = (p: Product) => {
+    const old = products.find(i => i.id === p.id);
+    if (old && old.stock !== p.stock) logAction('STOCK_EDIT', `${p.name}: ${old.stock} -> ${p.stock}`, 'warning');
     setProducts(prev => prev.map(item => item.id === p.id ? p : item));
     store.saveProduct(p);
-  };
-
-  const handleAddProduct = (p: Product) => {
-    setProducts(prev => [...prev, p]);
-    store.saveProduct(p);
-  };
-
-  const handleDeleteProduct = (id: string) => {
-    setProducts(prev => prev.filter(p => p.id !== id));
-    // IndexedDB delete implementation here if needed
   };
 
   const handleCompleteSale = (s: Sale) => {
@@ -87,53 +106,77 @@ const App: React.FC = () => {
   };
 
   const handleAddExpense = (e: Expense) => {
+    logAction('EXPENSE_ADD', `New expense: ${e.description} (KSH ${e.amount})`, 'info');
     setExpenses(prev => [e, ...prev]);
     store.saveExpense(e);
   };
 
   const handleDeleteExpense = (id: string) => {
+    const e = expenses.find(i => i.id === id);
+    if (e) logAction('EXPENSE_DELETE', `Deleted: ${e.description}`, 'critical');
     setExpenses(prev => prev.filter(e => e.id !== id));
     store.deleteExpense(id);
   };
 
-  const handleAddCashUp = (c: CashUp) => {
-    setCashUps(prev => [c, ...prev]);
-    store.saveCashUp(c);
+  const handleToggleShift = async (isClosed: boolean) => {
+    if (currentShift) {
+        if (isClosed) {
+            logAction('DAY_CLOSE', `Business Day Closed at ${new Date().toLocaleTimeString()}`, 'warning');
+            const data = { backupDate: new Date().toISOString(), products, sales, expenses, cashups };
+            const blob = new Blob([JSON.stringify(data)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `auto_backup_${new Date().toISOString().split('T')[0]}.json`;
+            link.click();
+        } else {
+            logAction('DAY_REOPEN', `Business Day Reopened manually`, 'critical');
+        }
+        const updatedShift = { ...currentShift, isClosed, closedAt: isClosed ? Date.now() : undefined };
+        setCurrentShift(updatedShift);
+        await store.saveShift(updatedShift);
+    }
   };
 
-  const handleUpdateEmployees = (es: Employee[]) => {
-    setEmployees(es);
-    store.saveEmployees(es);
-  };
-
-  const handleUpdateSettings = (s: AppSettings) => {
-    setSettings(s);
-    store.saveSettings(s);
-  };
+  if (loading || !settings) {
+    return (
+      <div className="h-screen w-screen flex items-center justify-center bg-slate-900 text-white">
+        <div className="text-center space-y-4">
+          <div className="w-16 h-16 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto"></div>
+          <p className="text-indigo-400 font-black uppercase tracking-widest text-xs">OFFLINE SECURE INIT...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="flex h-screen overflow-hidden bg-slate-50">
-      <div className="w-64 bg-slate-900 text-white flex flex-col shadow-2xl">
-        <div className="p-8">
+    <div className="flex h-screen overflow-hidden bg-slate-50 text-black">
+      {/* Sidebar */}
+      <div className="w-64 bg-slate-900 text-white flex flex-col shadow-2xl relative z-30">
+        <div className="p-8 text-white">
           <h1 className="text-2xl font-black tracking-tighter text-indigo-400">GALAXY INN</h1>
-          <p className="text-[10px] text-slate-500 uppercase font-bold tracking-[0.2em] mt-1">Smart POS System</p>
+          <p className="text-[10px] text-slate-500 uppercase font-bold tracking-[0.2em] mt-1">Standalone Offline POS</p>
         </div>
-        
         <nav className="flex-1 px-4 space-y-1 overflow-y-auto pb-4">
-          {(Object.keys(TabIcons) as Tab[]).map((tab) => (
-            <button
-              key={tab}
-              onClick={() => setActiveTab(tab)}
-              className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl font-bold transition-all ${activeTab === tab ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/20' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}
-            >
-              {TabIcons[tab]}
-              <span className="capitalize whitespace-nowrap overflow-hidden text-ellipsis">
-                {tab === 'pos' ? 'Point of Sale' : tab === 'history' ? 'Sales History' : tab === 'cashup' ? 'Cash Up' : tab}
-              </span>
-            </button>
-          ))}
+          {(Object.keys(TabIcons) as Tab[]).map((tab) => {
+            const isLocked = settings.lockedTabs.includes(tab);
+            return (
+              <button 
+                key={tab} 
+                onClick={() => handleTabClick(tab)} 
+                className={`w-full flex items-center justify-between px-4 py-3 rounded-xl font-bold transition-all ${activeTab === tab ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}
+              >
+                <div className="flex items-center space-x-3">
+                  {TabIcons[tab]}
+                  <span className="capitalize">{tab === 'pos' ? 'Point of Sale' : tab}</span>
+                </div>
+                {isLocked && (
+                  <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="opacity-40"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                )}
+              </button>
+            );
+          })}
         </nav>
-
         <div className="p-4 border-t border-slate-800">
           <div className="flex items-center space-x-3 p-3 bg-slate-800/50 rounded-xl">
             <div className="w-8 h-8 rounded-full bg-indigo-500 flex items-center justify-center font-bold text-xs uppercase shadow-sm">AD</div>
@@ -141,76 +184,127 @@ const App: React.FC = () => {
               <p className="text-xs font-black truncate uppercase tracking-tighter">Administrator</p>
               <div className="flex items-center space-x-1">
                 <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full"></div>
-                <p className="text-[10px] text-emerald-400 font-bold uppercase tracking-widest">OFFLINE READY</p>
+                <p className="text-[10px] text-emerald-400 font-bold uppercase tracking-widest">Local Integrity OK</p>
               </div>
             </div>
           </div>
         </div>
       </div>
 
-      <main className="flex-1 overflow-y-auto relative">
-        <header className="h-16 bg-white border-b border-slate-200 px-8 flex items-center justify-between sticky top-0 z-20 backdrop-blur-md bg-white/90">
-          <h2 className="text-lg font-black text-slate-800 uppercase tracking-tight">
-            {activeTab === 'pos' ? 'Point of Sale' : activeTab === 'history' ? 'Sales History' : activeTab === 'cashup' ? 'Cash Up Reconciliation' : activeTab}
-          </h2>
-          <div className="text-slate-400 text-[10px] font-black uppercase tracking-[0.2em]">
-            {new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+      {/* Main Content */}
+      <main className="flex-1 overflow-y-auto relative bg-slate-50">
+        <header className="h-16 bg-white border-b border-slate-200 px-8 flex items-center justify-between sticky top-0 z-20 backdrop-blur-md">
+          <h2 className="text-lg font-black text-black uppercase tracking-tight">{activeTab}</h2>
+          <div className="text-black text-[10px] font-black uppercase tracking-[0.2em]">
+            {new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}
           </div>
         </header>
 
-        <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
-          {activeTab === 'dashboard' && <Dashboard sales={sales} products={products} expenses={expenses} />}
+        <div className="text-black">
+          {activeTab === 'dashboard' && (
+            <Dashboard 
+              sales={sales} products={products} expenses={expenses} isDayClosed={currentShift?.isClosed || false}
+              onToggleShift={handleToggleShift} audits={audits}
+            />
+          )}
           {activeTab === 'pos' && (
             <POS 
-              products={products} 
-              onUpdateProduct={handleUpdateProduct}
-              onCompleteSale={handleCompleteSale} 
+              products={products} onUpdateProduct={handleUpdateProduct}
+              onCompleteSale={handleCompleteSale} isDayClosed={currentShift?.isClosed || false}
             />
           )}
           {activeTab === 'inventory' && (
-            <Inventory 
-              products={products}
-              onAddProduct={handleAddProduct}
-              onUpdateProduct={handleUpdateProduct}
-              onDeleteProduct={handleDeleteProduct}
-            />
+            <Inventory products={products} onAddProduct={(p) => { setProducts(prev => [...prev, p]); store.saveProduct(p); logAction('PROD_ADD', `New: ${p.name}`); }} onUpdateProduct={handleUpdateProduct} onDeleteProduct={(id) => { setProducts(prev => prev.filter(p => p.id !== id)); logAction('PROD_DEL', `ID: ${id}`, 'critical'); }} />
           )}
-          {activeTab === 'history' && <History sales={sales} employees={employees} products={products} />}
-          {activeTab === 'expenses' && (
-            <Expenses 
-              expenses={expenses} 
-              onAddExpense={handleAddExpense} 
-              onDeleteExpense={handleDeleteExpense}
-            />
-          )}
-          {activeTab === 'cashup' && (
-            <CashUpView 
-              sales={sales} 
-              cashups={cashups} 
-              onAddCashUp={handleAddCashUp} 
-            />
-          )}
+          {activeTab === 'history' && <History sales={sales.slice(0, 100)} employees={employees} products={products} />}
+          {activeTab === 'expenses' && <Expenses expenses={expenses} onAddExpense={handleAddExpense} onDeleteExpense={handleDeleteExpense} />}
+          {activeTab === 'cashup' && <CashUpView sales={sales} cashups={cashups} onAddCashUp={(c) => { setCashUps(prev => [c, ...prev]); store.saveCashUp(c); logAction('CASH_UP', `Reconciled with variance ${c.variance}`); }} />}
           {activeTab === 'reports' && <Reports sales={sales} settings={settings} />}
-          {activeTab === 'employees' && (
-            <Employees 
-              employees={employees} 
-              onUpdateEmployees={handleUpdateEmployees}
-            />
-          )}
-          {activeTab === 'settings' && (
-            <Settings 
-              settings={settings} 
-              onUpdateSettings={handleUpdateSettings}
-              sales={sales}
-              products={products}
-              expenses={expenses}
-              cashups={cashups}
-              employees={employees}
-              onReloadData={initData}
-            />
-          )}
+          {activeTab === 'employees' && <Employees employees={employees} onUpdateEmployees={(es) => { setEmployees(es); store.saveEmployees(es); }} />}
+          {activeTab === 'settings' && <Settings settings={settings} onUpdateSettings={(s) => { setSettings(s); store.saveSettings(s); logAction('CONFIG_CHANGE', 'Settings updated'); }} sales={sales} products={products} expenses={expenses} cashups={cashups} employees={employees} onReloadData={initData} />}
         </div>
       </main>
+
+      {/* Auth Modal (Gate) */}
+      {showAuthModal && (
+        <AuthModal 
+          correctPin={settings.adminPin} 
+          onSuccess={handleAuthSuccess} 
+          onCancel={() => setShowAuthModal(false)} 
+        />
+      )}
+    </div>
+  );
+};
+
+interface AuthModalProps {
+  correctPin: string;
+  onSuccess: () => void;
+  onCancel: () => void;
+}
+
+const AuthModal: React.FC<AuthModalProps> = ({ correctPin, onSuccess, onCancel }) => {
+  const [pin, setPin] = useState('');
+  const [error, setError] = useState(false);
+
+  const handleKeyClick = (val: string) => {
+    setError(false);
+    if (pin.length < 4) {
+      const newPin = pin + val;
+      setPin(newPin);
+      if (newPin.length === 4) {
+        if (newPin === correctPin) {
+          onSuccess();
+        } else {
+          setError(true);
+          setTimeout(() => setPin(''), 500);
+        }
+      }
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-md z-[100] flex items-center justify-center p-4">
+      <div className="bg-white rounded-[3rem] w-full max-w-xs p-10 shadow-2xl animate-in zoom-in-95 text-black">
+        <div className="text-center mb-8">
+          <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4 text-black">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+          </div>
+          <h3 className="text-xl font-black uppercase tracking-tighter">Admin Authorization</h3>
+          <p className="text-[10px] font-bold uppercase tracking-widest opacity-60 mt-1">Enter Master PIN to continue</p>
+        </div>
+
+        <div className="flex justify-center space-x-3 mb-10">
+          {[0, 1, 2, 3].map(i => (
+            <div 
+              key={i} 
+              className={`w-4 h-4 rounded-full border-2 transition-all duration-200 ${error ? 'bg-red-500 border-red-500 animate-bounce' : pin.length > i ? 'bg-black border-black' : 'border-slate-200'}`}
+            />
+          ))}
+        </div>
+
+        <div className="grid grid-cols-3 gap-3">
+          {['1', '2', '3', '4', '5', '6', '7', '8', '9', '', '0', 'X'].map((key, i) => (
+            <button
+              key={i}
+              onClick={() => {
+                if (key === 'X') setPin(pin.slice(0, -1));
+                else if (key !== '') handleKeyClick(key);
+              }}
+              className={`h-16 rounded-2xl font-black text-xl flex items-center justify-center transition active:scale-90 ${key === '' ? 'pointer-events-none' : 'bg-slate-50 border border-slate-100 hover:bg-slate-100'}`}
+            >
+              {key}
+            </button>
+          ))}
+        </div>
+
+        <button 
+          onClick={onCancel} 
+          className="w-full mt-8 py-4 text-black font-black uppercase text-[10px] tracking-widest hover:underline"
+        >
+          Cancel
+        </button>
+      </div>
     </div>
   );
 };

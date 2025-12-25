@@ -1,16 +1,18 @@
 
-import { Product, Sale, Employee, AppSettings, Expense, CashUp } from './types';
+import { Product, Sale, Employee, AppSettings, Expense, CashUp, DayShift, AuditLog } from './types';
 import { INITIAL_PRODUCTS, INITIAL_EMPLOYEES, INITIAL_SETTINGS } from './constants';
 
 const DB_NAME = 'GalaxyInnDB';
-const DB_VERSION = 2;
+const DB_VERSION = 4; 
 const STORES = {
   PRODUCTS: 'products',
   SALES: 'sales',
   EXPENSES: 'expenses',
   CASHUPS: 'cashups',
   EMPLOYEES: 'employees',
-  SETTINGS: 'settings'
+  SETTINGS: 'settings',
+  SHIFTS: 'shifts',
+  AUDIT: 'audit_logs'
 };
 
 class GalaxyDB {
@@ -38,12 +40,12 @@ class GalaxyDB {
     });
   }
 
-  async getAll<T>(storeName: string): Promise<T[]> {
+  async getAll<T>(storeName: string, limit?: number): Promise<T[]> {
     return new Promise((resolve, reject) => {
       if (!this.db) return reject('DB not initialized');
       const transaction = this.db.transaction(storeName, 'readonly');
       const store = transaction.objectStore(storeName);
-      const request = store.getAll();
+      const request = store.getAll(null, limit);
       request.onsuccess = () => resolve(request.result);
       request.onerror = () => reject(request.error);
     });
@@ -82,6 +84,17 @@ class GalaxyDB {
     });
   }
 
+  async getById<T>(storeName: string, id: string): Promise<T | undefined> {
+    return new Promise((resolve, reject) => {
+      if (!this.db) return reject('DB not initialized');
+      const transaction = this.db.transaction(storeName, 'readonly');
+      const store = transaction.objectStore(storeName);
+      const request = store.get(id);
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+  }
+
   async clearAllStores(): Promise<void> {
     return new Promise((resolve, reject) => {
       if (!this.db) return reject('DB not initialized');
@@ -100,19 +113,21 @@ export const db = new GalaxyDB();
 export const useStore = () => {
   return {
     STORES,
+    // Fix: Added missing persistence methods and fixed plural versions for bulk saves
     saveProduct: (p: Product) => db.put(STORES.PRODUCTS, p),
     saveProducts: (ps: Product[]) => db.putBatch(STORES.PRODUCTS, ps),
     saveSale: (s: Sale) => db.put(STORES.SALES, s),
     saveSales: (ss: Sale[]) => db.putBatch(STORES.SALES, ss),
+    saveAudit: (log: AuditLog) => db.put(STORES.AUDIT, log),
     saveExpense: (e: Expense) => db.put(STORES.EXPENSES, e),
     saveExpenses: (es: Expense[]) => db.putBatch(STORES.EXPENSES, es),
-    deleteExpense: (id: string) => db.delete(STORES.EXPENSES, id),
+    saveShift: (shift: DayShift) => db.put(STORES.SHIFTS, shift),
     saveCashUp: (c: CashUp) => db.put(STORES.CASHUPS, c),
     saveCashUps: (cs: CashUp[]) => db.putBatch(STORES.CASHUPS, cs),
-    saveEmployee: (e: Employee) => db.put(STORES.EMPLOYEES, e),
     saveEmployees: (es: Employee[]) => db.putBatch(STORES.EMPLOYEES, es),
-    deleteEmployee: (id: string) => db.delete(STORES.EMPLOYEES, id),
-    saveSettings: (s: AppSettings) => db.put(STORES.SETTINGS, { ...s, id: 'global' }),
+    saveSettings: (s: AppSettings) => db.put(STORES.SETTINGS, { ...s, id: 'settings' }),
+    deleteExpense: (id: string) => db.delete(STORES.EXPENSES, id),
+    getShift: (dateId: string) => db.getById<DayShift>(STORES.SHIFTS, dateId),
     clearAll: () => db.clearAllStores(),
     
     loadAll: async () => {
@@ -122,7 +137,10 @@ export const useStore = () => {
       const expenses = await db.getAll<Expense>(STORES.EXPENSES);
       const cashups = await db.getAll<CashUp>(STORES.CASHUPS);
       const employees = await db.getAll<Employee>(STORES.EMPLOYEES);
+      const audits = await db.getAll<AuditLog>(STORES.AUDIT, 100); 
       const settingsList = await db.getAll<AppSettings>(STORES.SETTINGS);
+      const todayId = new Date().toISOString().split('T')[0];
+      const currentShift = await db.getById<DayShift>(STORES.SHIFTS, todayId);
       
       return {
         products: products.length ? products : INITIAL_PRODUCTS,
@@ -130,7 +148,9 @@ export const useStore = () => {
         expenses,
         cashups,
         employees: employees.length ? employees : INITIAL_EMPLOYEES,
-        settings: settingsList[0] || INITIAL_SETTINGS
+        audits: audits.sort((a,b) => b.timestamp - a.timestamp),
+        settings: settingsList[0] || INITIAL_SETTINGS,
+        currentShift: currentShift || { id: todayId, isClosed: false }
       };
     }
   };
