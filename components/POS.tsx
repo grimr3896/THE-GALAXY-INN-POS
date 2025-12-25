@@ -20,9 +20,16 @@ const POS: React.FC<POSProps> = ({ products, onCompleteSale, onUpdateProduct, is
   const [splitCash, setSplitCash] = useState<number>(0);
   const [splitMPesa, setSplitMPesa] = useState<number>(0);
   const [activeTab, setActiveTab] = useState<'bottles' | 'drums'>('bottles');
+  const [receiptSize, setReceiptSize] = useState<'xs' | 's' | 'm' | 'l'>('s');
 
   const total = useMemo(() => cart.reduce((acc, i) => acc + (i.price * i.quantity), 0), [cart]);
-  const changeDue = Math.max(0, cashReceived - total);
+
+  const sizeClasses = {
+    xs: 'text-[7px]',
+    s: 'text-[9px]',
+    m: 'text-[11px]',
+    l: 'text-[13px]'
+  };
 
   useEffect(() => {
     if (paymentMethod === 'split') {
@@ -297,11 +304,23 @@ const POS: React.FC<POSProps> = ({ products, onCompleteSale, onUpdateProduct, is
 
       {showReceiptModal && lastSale && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
-          <div className="bg-white rounded-[2.5rem] w-full max-sm p-8 shadow-2xl animate-in zoom-in-95 print:shadow-none print:p-0">
-            <div id="printable-customer-receipt" className="border-2 border-dashed border-black p-6 rounded-3xl bg-white font-mono text-[10px] leading-tight text-black print:border-none print:p-4">
+          <div className="bg-white rounded-[2.5rem] w-full max-w-sm p-8 shadow-2xl animate-in zoom-in-95 print:shadow-none print:p-0">
+            <div className="flex justify-center space-x-2 mb-6 print:hidden">
+              {(['xs', 's', 'm', 'l'] as const).map(size => (
+                <button
+                  key={size}
+                  onClick={() => setReceiptSize(size)}
+                  className={`px-3 py-1 rounded-lg font-black text-[9px] uppercase border transition ${receiptSize === size ? 'bg-black text-white border-black' : 'bg-white text-black border-slate-200'}`}
+                >
+                  {size.toUpperCase()}
+                </button>
+              ))}
+            </div>
+
+            <div id="printable-customer-receipt" className={`border-2 border-dashed border-black p-6 rounded-3xl bg-white font-mono leading-tight text-black print:border-none print:p-4 ${sizeClasses[receiptSize]}`}>
               <div className="text-center mb-4">
                 <h2 className="text-xl font-black uppercase tracking-tighter">GALAXY INN</h2>
-                <p className="font-bold text-[8px] uppercase">OFFLINE SECURE POS</p>
+                <p className="font-bold uppercase tracking-widest">OFFLINE SECURE POS</p>
                 <div className="border-t border-black border-dashed my-2"></div>
               </div>
               <div className="space-y-1 mb-4">

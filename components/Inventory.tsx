@@ -1,15 +1,17 @@
 
 import React, { useState, useRef } from 'react';
 import { Product } from '../types';
+import AuthModal from './AuthModal';
 
 interface InventoryProps {
   products: Product[];
   onAddProduct: (p: Product) => void;
   onUpdateProduct: (p: Product) => void;
   onDeleteProduct: (id: string) => void;
+  adminPin: string;
 }
 
-const Inventory: React.FC<InventoryProps> = ({ products, onAddProduct, onUpdateProduct, onDeleteProduct }) => {
+const Inventory: React.FC<InventoryProps> = ({ products, onAddProduct, onUpdateProduct, onDeleteProduct, adminPin }) => {
   const [showForm, setShowForm] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -22,6 +24,10 @@ const Inventory: React.FC<InventoryProps> = ({ products, onAddProduct, onUpdateP
   const [stock, setStock] = useState(0);
   const [capacity, setCapacity] = useState(50000);
   const [minThreshold, setMinThreshold] = useState(10);
+
+  // Auth state for internal actions
+  const [showAuth, setShowAuth] = useState(false);
+  const [pendingAction, setPendingAction] = useState<(() => void) | null>(null);
 
   const resetForm = () => {
     setName('');
@@ -82,17 +88,24 @@ const Inventory: React.FC<InventoryProps> = ({ products, onAddProduct, onUpdateP
     resetForm();
   };
 
+  const requestAuth = (action: () => void) => {
+    setPendingAction(() => action);
+    setShowAuth(true);
+  };
+
   const handleEdit = (p: Product) => {
-    setEditingProduct(p);
-    setName(p.name);
-    setCategory(p.category);
-    setImage(p.image);
-    setBuyPrice(p.buyPrice);
-    setSellPrice(p.category === 'drum' ? (p.drumPrices?.['1000ml'] || 0) : p.sellPrice);
-    setStock(p.stock);
-    setCapacity(p.capacity || 50000);
-    setMinThreshold(p.minThreshold);
-    setShowForm(true);
+    requestAuth(() => {
+      setEditingProduct(p);
+      setName(p.name);
+      setCategory(p.category);
+      setImage(p.image);
+      setBuyPrice(p.buyPrice);
+      setSellPrice(p.category === 'drum' ? (p.drumPrices?.['1000ml'] || 0) : p.sellPrice);
+      setStock(p.stock);
+      setCapacity(p.capacity || 50000);
+      setMinThreshold(p.minThreshold);
+      setShowForm(true);
+    });
   };
 
   return (
@@ -104,7 +117,7 @@ const Inventory: React.FC<InventoryProps> = ({ products, onAddProduct, onUpdateP
         </div>
         <button 
           type="button"
-          onClick={() => { resetForm(); setShowForm(true); }}
+          onClick={() => requestAuth(() => { resetForm(); setShowForm(true); })}
           className="bg-black text-white px-6 py-3 rounded-xl font-bold hover:bg-slate-800 transition shadow-lg flex items-center space-x-2"
         >
           <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg>
@@ -166,7 +179,7 @@ const Inventory: React.FC<InventoryProps> = ({ products, onAddProduct, onUpdateP
                     </button>
                     <button 
                       type="button"
-                      onClick={() => onDeleteProduct(p.id)} 
+                      onClick={() => requestAuth(() => onDeleteProduct(p.id))} 
                       className="p-2 text-black opacity-40 hover:text-red-700 hover:opacity-100 transition"
                       title="Delete Product"
                     >
@@ -265,6 +278,23 @@ const Inventory: React.FC<InventoryProps> = ({ products, onAddProduct, onUpdateP
             </div>
           </div>
         </div>
+      )}
+
+      {showAuth && (
+        <AuthModal 
+          correctPin={adminPin}
+          onSuccess={() => {
+            setShowAuth(false);
+            if (pendingAction) pendingAction();
+            setPendingAction(null);
+          }}
+          onCancel={() => {
+            setShowAuth(false);
+            setPendingAction(null);
+          }}
+          title="Action Required"
+          subtitle="Enter PIN to modify inventory"
+        />
       )}
     </div>
   );

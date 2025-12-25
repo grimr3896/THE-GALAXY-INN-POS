@@ -13,6 +13,14 @@ const History: React.FC<HistoryProps> = ({ sales, employees, products }) => {
   const [filterEmployee, setFilterEmployee] = useState<string>('all');
   const [showReceiptModal, setShowReceiptModal] = useState(false);
   const [selectedSale, setSelectedSale] = useState<Sale | null>(null);
+  const [receiptSize, setReceiptSize] = useState<'xs' | 's' | 'm' | 'l'>('s');
+
+  const sizeClasses = {
+    xs: 'text-[7px]',
+    s: 'text-[9px]',
+    m: 'text-[11px]',
+    l: 'text-[13px]'
+  };
 
   const calculateProfit = (sale: Sale) => {
     const totalCost = sale.items.reduce((acc, item) => {
@@ -128,7 +136,19 @@ const History: React.FC<HistoryProps> = ({ sales, employees, products }) => {
       {showReceiptModal && selectedSale && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
           <div className="bg-white rounded-[2.5rem] w-full max-w-sm p-8 shadow-2xl animate-in zoom-in-95 print:shadow-none print:p-0">
-            <div id="printable-history-receipt" className="border-2 border-dashed border-black p-6 rounded-3xl bg-white font-mono text-[10px] leading-tight text-black print:border-none print:p-4">
+            <div className="flex justify-center space-x-2 mb-6 print:hidden">
+              {(['xs', 's', 'm', 'l'] as const).map(size => (
+                <button
+                  key={size}
+                  onClick={() => setReceiptSize(size)}
+                  className={`px-3 py-1 rounded-lg font-black text-[9px] uppercase border transition ${receiptSize === size ? 'bg-black text-white border-black' : 'bg-white text-black border-slate-200'}`}
+                >
+                  {size.toUpperCase()}
+                </button>
+              ))}
+            </div>
+
+            <div id="printable-history-receipt" className={`border-2 border-dashed border-black p-6 rounded-3xl bg-white font-mono leading-tight text-black print:border-none print:p-4 ${sizeClasses[receiptSize]}`}>
               <div className="text-center mb-4">
                 <h2 className="text-xl font-black uppercase tracking-tighter">GALAXY INN</h2>
                 <div className="border-t border-black border-dashed my-2"></div>
