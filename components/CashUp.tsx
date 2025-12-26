@@ -1,6 +1,7 @@
 
 import React, { useState, useMemo } from 'react';
-import { Sale, CashUp } from '../types';
+import { Sale, CashUp, DaySnapshot } from '../types';
+import { useStore } from '../store';
 
 interface CashUpProps {
   sales: Sale[];
@@ -9,6 +10,7 @@ interface CashUpProps {
 }
 
 const CashUpView: React.FC<CashUpProps> = ({ sales, cashups, onAddCashUp }) => {
+  const store = useStore();
   const [denominations, setDenominations] = useState<Record<string, number>>({
     '1000': 0, '500': 0, '200': 0, '100': 0, '50': 0, '40': 0, '20': 0, '10': 0, '5': 0, '1': 0
   });
@@ -37,16 +39,35 @@ const CashUpView: React.FC<CashUpProps> = ({ sales, cashups, onAddCashUp }) => {
       setDenominations(prev => ({ ...prev, [denom]: num }));
   };
 
-  const handleReconcile = () => {
-    if (confirm("Are you sure you want to finalize this Cash Up session?")) {
-      onAddCashUp({
-        id: `CU-${Date.now()}`,
-        timestamp: Date.now(),
+  const handleReconcile = async () => {
+    if (confirm("FINALIZE DAY: This will lock today's sales and create an immutable record. Proceed?")) {
+      const timestamp = Date.now();
+      const dateId = new Date().toISOString().split('T')[0];
+
+      const cashUpRecord: CashUp = {
+        id: `CU-${timestamp}`,
+        timestamp,
         expectedCash, actualCash,
         expectedMPesa, actualMPesa,
         expectedCard, actualCard,
         variance, notes
-      });
+      };
+
+      const snapshot: DaySnapshot = {
+        id: dateId,
+        timestamp,
+        totalSales: totalExpected,
+        paymentBreakdown: { cash: expectedCash, mpesa: expectedMPesa, card: expectedCard },
+        totalExpenses: 0,
+        variance: variance,
+        isLocked: true
+      };
+
+      await store.saveCashUp(cashUpRecord);
+      await store.saveSnapshot(snapshot);
+      
+      onAddCashUp(cashUpRecord);
+      
       setDenominations({ '1000': 0, '500': 0, '200': 0, '100': 0, '50': 0, '40': 0, '20': 0, '10': 0, '5': 0, '1': 0 });
       setActualMPesa(0); setActualCard(0); setNotes('');
     }
@@ -54,74 +75,113 @@ const CashUpView: React.FC<CashUpProps> = ({ sales, cashups, onAddCashUp }) => {
 
   return (
     <div className="p-8 space-y-8 max-w-6xl mx-auto text-black font-black">
-      <div className="flex justify-between items-center">
+      <div className="flex justify-between items-center border-b border-slate-200 pb-8">
         <div>
-          <h2 className="text-2xl font-black text-black uppercase tracking-tight">Shift Reconciliation</h2>
-          <p className="text-black font-bold text-xs uppercase tracking-widest mt-1 opacity-60">Verify physical cash and mobile payments</p>
+          <h2 className="text-3xl font-black text-black uppercase tracking-tighter">Shift Verification</h2>
+          <p className="text-black font-bold text-xs uppercase tracking-widest mt-1 opacity-60">Physical Tally & Electronic Reconciliation</p>
         </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         <div className="lg:col-span-2 space-y-6">
+          {/* Physical Cash Count */}
           <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm space-y-8">
-            <h3 className="text-lg font-black text-black uppercase tracking-tight">Cash Denominations</h3>
+            <h3 className="text-lg font-black text-black uppercase tracking-tight">Physical Cash Count</h3>
             <div className="grid grid-cols-2 gap-x-12 gap-y-4">
                 {Object.keys(denominations).sort((a,b) => Number(b)-Number(a)).map(denom => (
                     <div key={denom} className="flex items-center space-x-4">
-                        <div className="w-16 text-right font-black text-black opacity-40 text-xs uppercase tracking-widest">{denom}s</div>
-                        <input type="number" value={denominations[denom] || ''} onChange={(e) => handleDenomChange(denom, e.target.value)} className="flex-1 px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none font-black text-black text-sm focus:border-black transition" placeholder="0" />
+                        <div className="w-16 text-right font-black text-black opacity-30 text-[10px] uppercase tracking-widest">{denom}S</div>
+                        <input 
+                          type="number" 
+                          value={denominations[denom] || ''} 
+                          onChange={(e) => handleDenomChange(denom, e.target.value)} 
+                          className="flex-1 px-4 py-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none font-black text-black text-sm focus:border-black transition" 
+                          placeholder="0" 
+                        />
                         <div className="w-24 text-right font-black text-black text-xs">{(Number(denom) * denominations[denom]).toLocaleString()}</div>
                     </div>
                 ))}
             </div>
-            <div className="pt-6 border-t border-slate-100 flex justify-between items-center font-black">
-                <span className="text-sm uppercase tracking-widest opacity-40">Total Physical Cash</span>
-                <span className="text-2xl">KES {actualCash.toLocaleString()}</span>
-            </div>
           </div>
 
-          <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm space-y-6">
-            <h3 className="text-lg font-black text-black uppercase tracking-tight">Digital Totals</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                    <label className="block text-[10px] font-black text-black uppercase tracking-widest mb-2 opacity-60">Confirmed M-Pesa Bal</label>
-                    <input type="number" value={actualMPesa || ''} onChange={(e) => setActualMPesa(Number(e.target.value))} className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none font-black text-xl text-emerald-800" />
-                </div>
-                <div>
-                    <label className="block text-[10px] font-black text-black uppercase tracking-widest mb-2 opacity-60">Confirmed Card Total</label>
-                    <input type="number" value={actualCard || ''} onChange={(e) => setActualCard(Number(e.target.value))} className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none font-black text-xl text-indigo-800" />
-                </div>
+          {/* Electronic Totals Input */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm space-y-4">
+              <h3 className="text-sm font-black text-black uppercase tracking-tight">M-Pesa Verification</h3>
+              <div className="relative">
+                <div className="absolute left-6 top-1/2 -translate-y-1/2 font-black text-xs opacity-20">KES</div>
+                <input 
+                  type="number" 
+                  value={actualMPesa || ''} 
+                  onChange={(e) => setActualMPesa(Number(e.target.value))} 
+                  className="w-full pl-16 pr-6 py-6 bg-slate-50 border border-slate-200 rounded-2xl outline-none font-black text-2xl text-emerald-800 focus:border-black transition" 
+                  placeholder="0"
+                />
+              </div>
             </div>
-            <textarea value={notes} onChange={(e) => setNotes(e.target.value)} className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none font-black text-black text-sm h-24" placeholder="Closing notes..." />
+
+            <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm space-y-4">
+              <h3 className="text-sm font-black text-black uppercase tracking-tight">Card/PDQ Tally</h3>
+              <div className="relative">
+                <div className="absolute left-6 top-1/2 -translate-y-1/2 font-black text-xs opacity-20">KES</div>
+                <input 
+                  type="number" 
+                  value={actualCard || ''} 
+                  onChange={(e) => setActualCard(Number(e.target.value))} 
+                  className="w-full pl-16 pr-6 py-6 bg-slate-50 border border-slate-200 rounded-2xl outline-none font-black text-2xl text-indigo-800 focus:border-black transition" 
+                  placeholder="0"
+                />
+              </div>
+            </div>
           </div>
         </div>
 
         <div className="space-y-6">
-          <div className="bg-black text-white p-8 rounded-[2.5rem] shadow-xl space-y-8 sticky top-24">
-            <h3 className="text-lg font-black uppercase tracking-tight text-white">Shift Finalization</h3>
-            <div className="space-y-4 text-white font-black">
-              {[
-                { l: "Exp. Cash", v: expectedCash },
-                { l: "Exp. M-Pesa", v: expectedMPesa },
-                { l: "Exp. Card", v: expectedCard }
-              ].map((row, i) => (
-                <div key={i} className="flex justify-between border-b border-white/10 pb-3">
-                  <span className="opacity-60 text-[10px] uppercase">{row.l}</span>
-                  <span className="text-xs">KES {row.v.toLocaleString()}</span>
-                </div>
-              ))}
-              <div className="pt-4 flex justify-between items-center text-lg">
-                <span className="opacity-60 uppercase text-[10px]">Expected Total</span>
-                <span>KES {totalExpected.toLocaleString()}</span>
+          {/* RECONCILIATION CARD - HIGH FIDELITY */}
+          <div className="bg-black text-white p-10 rounded-[3rem] shadow-2xl space-y-10 sticky top-24 border border-slate-800">
+            <h3 className="text-2xl font-black uppercase tracking-tight">RECONCILIATION</h3>
+            
+            <div className="space-y-6">
+              <div className="flex justify-between items-center pb-5 border-b border-white/10">
+                <span className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">SYSTEM SALES</span>
+                <span className="text-sm font-black">KES {totalExpected.toLocaleString()}</span>
               </div>
-              <div className="flex justify-between items-center pt-6 border-t border-white/10">
-                <span className="text-white font-black text-sm uppercase tracking-tight">Variance</span>
-                <span className={`text-2xl font-black ${variance < 0 ? 'text-red-500' : 'text-emerald-500'}`}>
-                  {variance > 0 ? '+' : ''}{variance.toLocaleString()}
+              
+              <div className="flex justify-between items-center pb-5 border-b border-white/10">
+                <span className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">CASH COUNT</span>
+                <span className="text-sm font-black">KES {actualCash.toLocaleString()}</span>
+              </div>
+
+              <div className="flex justify-between items-center pb-5 border-b border-white/10">
+                <span className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">MPESA COUNT</span>
+                <span className="text-sm font-black">KES {actualMPesa.toLocaleString()}</span>
+              </div>
+
+              <div className="pt-6 flex justify-between items-end">
+                <span className="text-lg font-black uppercase tracking-tight">VARIANCE</span>
+                <span className={`text-6xl font-black leading-none tracking-tighter ${variance < 0 ? 'text-red-500' : (variance === 0 ? 'text-emerald-500' : 'text-blue-500')}`}>
+                  {variance.toLocaleString()}
                 </span>
               </div>
             </div>
-            <button onClick={handleReconcile} disabled={totalActual === 0} className="w-full py-5 bg-white text-black font-black rounded-2xl text-sm uppercase tracking-widest hover:bg-slate-100 transition disabled:opacity-30">Reconcile & Close Shift</button>
+
+            <button 
+              onClick={handleReconcile} 
+              disabled={totalActual === 0} 
+              className="w-full py-7 bg-white/5 border border-white/10 text-white font-black rounded-[2rem] text-[11px] uppercase tracking-[0.3em] hover:bg-white/10 disabled:opacity-20 transition-all shadow-lg active:scale-95 mt-4"
+            >
+              LOCK DAY & ARCHIVE
+            </button>
+          </div>
+
+          <div className="p-8 bg-amber-50 rounded-[2.5rem] border border-amber-100">
+            <h4 className="text-[10px] font-black uppercase tracking-widest text-amber-800 mb-2">Audit Note</h4>
+            <textarea 
+              value={notes} 
+              onChange={(e) => setNotes(e.target.value)}
+              className="w-full bg-transparent border-none font-bold text-xs outline-none text-amber-900 h-24 placeholder:text-amber-200"
+              placeholder="Record any discrepancies here..."
+            />
           </div>
         </div>
       </div>

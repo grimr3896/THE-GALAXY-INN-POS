@@ -31,6 +31,8 @@ export interface Sale {
   items: SaleItem[];
   total: number;
   paymentMethod: 'cash' | 'card' | 'm-pesa' | 'split';
+  amountReceived?: number;
+  changeGiven?: number;
   splitBreakdown?: {
     cash: number;
     mpesa: number;
@@ -38,6 +40,36 @@ export interface Sale {
   };
   cashierId: string;
   vatAmount?: number;
+}
+
+export interface SuspendedOrder {
+  id: string;
+  name: string;
+  items: SaleItem[];
+  total: number;
+  timestamp: number;
+}
+
+export interface Receipt {
+  id: string;
+  saleId: string;
+  timestamp: number;
+  content: string; // Pre-rendered or structured receipt data
+  total: number;
+}
+
+export interface DaySnapshot {
+  id: string; // ISO Date YYYY-MM-DD
+  timestamp: number;
+  totalSales: number;
+  paymentBreakdown: {
+    cash: number;
+    mpesa: number;
+    card: number;
+  };
+  totalExpenses: number;
+  variance: number;
+  isLocked: boolean;
 }
 
 export interface AuditLog {
@@ -84,10 +116,11 @@ export interface DayShift {
   closedAt?: number;
 }
 
-// Added optional id to match IndexedDB keyPath requirements
 export interface AppSettings {
   id?: string;
   storeName: string;
+  storePhone?: string;
+  storeAddress?: string;
   adminPin: string;
   lockedTabs: Tab[];
   webhookUrl: string;

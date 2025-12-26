@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useStore } from './store';
-import { Tab, Product, Sale, Employee, AppSettings, Expense, CashUp, DayShift, AuditLog } from './types';
+import { Tab, Product, Sale, Employee, AppSettings, Expense, CashUp, DayShift, AuditLog, SuspendedOrder } from './types';
 import Dashboard from './components/Dashboard';
 import POS from './components/POS';
 import Inventory from './components/Inventory';
@@ -30,7 +30,6 @@ const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<Tab>('dashboard');
   const [loading, setLoading] = useState(true);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
-  const [isPersistent, setIsPersistent] = useState(false);
 
   const [products, setProducts] = useState<Product[]>([]);
   const [sales, setSales] = useState<Sale[]>([]);
@@ -38,6 +37,7 @@ const App: React.FC = () => {
   const [cashups, setCashUps] = useState<CashUp[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [audits, setAudits] = useState<AuditLog[]>([]);
+  const [suspendedOrders, setSuspendedOrders] = useState<SuspendedOrder[]>([]);
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [currentShift, setCurrentShift] = useState<DayShift | null>(null);
 
@@ -46,15 +46,6 @@ const App: React.FC = () => {
 
   const initData = async () => {
     try {
-      // Request Storage Persistence
-      if (navigator.storage && navigator.storage.persist) {
-        const persistent = await navigator.storage.persist();
-        setIsPersistent(persistent);
-        if (!persistent) {
-          console.warn("Storage is NOT persistent. Browser may clear data if disk is full.");
-        }
-      }
-
       const data = await store.loadAll();
       setProducts(data.products);
       setSales(data.sales);
@@ -62,11 +53,12 @@ const App: React.FC = () => {
       setCashUps(data.cashups);
       setEmployees(data.employees);
       setAudits(data.audits);
+      setSuspendedOrders(data.suspended || []);
       setSettings(data.settings);
       setCurrentShift(data.currentShift);
       setLoading(false);
     } catch (err) {
-      console.error("Failed to load local DB", err);
+      console.error("CRITICAL: Local drive access failed", err);
     }
   };
 
@@ -105,7 +97,7 @@ const App: React.FC = () => {
       timestamp: Date.now(),
       action,
       details,
-      userId: 'admin',
+      userId: 'admin_master',
       severity
     };
     setAudits(prev => [log, ...prev].slice(0, 100));
@@ -113,44 +105,58 @@ const App: React.FC = () => {
   };
 
   const handleUpdateProduct = (p: Product) => {
-    const old = products.find(i => i.id === p.id);
-    if (old && old.stock !== p.stock) logAction('STOCK_EDIT', `${p.name}: ${old.stock} -> ${p.stock}`, 'warning');
     setProducts(prev => prev.map(item => item.id === p.id ? p : item));
     store.saveProduct(p);
   };
 
   const handleCompleteSale = (s: Sale) => {
     setSales(prev => [s, ...prev]);
-    store.saveSale(s);
+    // Atomic UI update to match persisted stock state
+    setProducts(prevProducts => {
+      return prevProducts.map(p => {
+        const soldItem = s.items.find(i => i.productId === p.id);
+        if (!soldItem) return p;
+        const newP = { ...p };
+        if (p.category === 'bottle') {
+          newP.stock -= soldItem.quantity;
+        } else {
+          newP.currentLevel = (p.currentLevel || 0) - (soldItem.volume || 0) * soldItem.quantity;
+        }
+        return newP;
+      });
+    });
+  };
+
+  const handleSuspendOrder = (order: SuspendedOrder) => {
+    setSuspendedOrders(prev => [...prev, order]);
+    store.saveSuspendedOrder(order);
+    logAction('ORDER_SUSPEND', `Tab created for ${order.name}`);
+  };
+
+  const handleRecallOrder = (id: string) => {
+    const order = suspendedOrders.find(o => o.id === id);
+    if (order) {
+        setSuspendedOrders(prev => prev.filter(o => o.id !== id));
+        store.deleteSuspendedOrder(id);
+        logAction('ORDER_RECALL', `Tab restored for ${order.name}`);
+    }
   };
 
   const handleAddExpense = (e: Expense) => {
-    logAction('EXPENSE_ADD', `New expense: ${e.description} (KSH ${e.amount})`, 'info');
+    logAction('EXPENSE_ADD', `${e.description} (KSH ${e.amount})`);
     setExpenses(prev => [e, ...prev]);
     store.saveExpense(e);
   };
 
   const handleDeleteExpense = (id: string) => {
-    const e = expenses.find(i => i.id === id);
-    if (e) logAction('EXPENSE_DELETE', `Deleted: ${e.description}`, 'critical');
     setExpenses(prev => prev.filter(e => e.id !== id));
     store.deleteExpense(id);
+    logAction('EXPENSE_DELETE', `Entry ${id} purged`, 'warning');
   };
 
   const handleToggleShift = async (isClosed: boolean) => {
     if (currentShift) {
-        if (isClosed) {
-            logAction('DAY_CLOSE', `Business Day Closed at ${new Date().toLocaleTimeString()}`, 'warning');
-            const data = { backupDate: new Date().toISOString(), products, sales, expenses, cashups };
-            const blob = new Blob([JSON.stringify(data)], { type: 'application/json' });
-            const url = URL.createObjectURL(blob);
-            const link = document.createElement('a');
-            link.href = url;
-            link.download = `auto_backup_${new Date().toISOString().split('T')[0]}.json`;
-            link.click();
-        } else {
-            logAction('DAY_REOPEN', `Business Day Reopened manually`, 'critical');
-        }
+        logAction(isClosed ? 'SHIFT_CLOSE' : 'SHIFT_OPEN', isClosed ? 'End of day business lock' : 'Manager reopened vault', isClosed ? 'warning' : 'critical');
         const updatedShift = { ...currentShift, isClosed, closedAt: isClosed ? Date.now() : undefined };
         setCurrentShift(updatedShift);
         await store.saveShift(updatedShift);
@@ -160,9 +166,9 @@ const App: React.FC = () => {
   if (loading || !settings) {
     return (
       <div className="h-screen w-screen flex items-center justify-center bg-slate-900 text-white">
-        <div className="text-center space-y-4">
-          <div className="w-16 h-16 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto"></div>
-          <p className="text-indigo-400 font-black uppercase tracking-widest text-xs">Accessing Local Computer Storage...</p>
+        <div className="text-center space-y-6">
+          <div className="w-16 h-16 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto shadow-2xl shadow-indigo-500/50"></div>
+          <p className="text-indigo-400 font-black uppercase tracking-[0.5em] text-[10px] animate-pulse">Initializing Physical Ledger...</p>
         </div>
       </div>
     );
@@ -170,62 +176,52 @@ const App: React.FC = () => {
 
   return (
     <div className="flex h-screen overflow-hidden bg-slate-50 text-black">
-      {/* Sidebar */}
-      <div className="w-64 bg-slate-900 text-white flex flex-col shadow-2xl relative z-30">
-        <div className="p-8 text-white">
-          <h1 className="text-2xl font-black tracking-tighter text-indigo-400 uppercase leading-none">Galaxy Inn</h1>
-          <p className="text-[9px] text-slate-500 uppercase font-bold tracking-[0.1em] mt-2">Local Hard Drive Database</p>
+      <div className="w-72 bg-slate-900 text-white flex flex-col shadow-[10px_0_50px_rgba(0,0,0,0.2)] relative z-30">
+        <div className="p-10 text-white">
+          <h1 className="text-3xl font-black tracking-tighter text-indigo-400 uppercase leading-none">GALAXY INN</h1>
+          <p className="text-[9px] text-slate-500 uppercase font-bold tracking-[0.3em] mt-3">Drive-Based POS v4.0</p>
         </div>
-        <nav className="flex-1 px-4 space-y-1 overflow-y-auto pb-4">
+        <nav className="flex-1 px-6 space-y-2 overflow-y-auto pb-6">
           {(Object.keys(TabIcons) as Tab[]).map((tab) => {
             const isLocked = settings.lockedTabs.includes(tab);
             return (
               <button 
                 key={tab} 
                 onClick={() => handleTabClick(tab)} 
-                className={`w-full flex items-center justify-between px-4 py-3 rounded-xl font-bold transition-all ${activeTab === tab ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}
+                className={`w-full flex items-center justify-between px-5 py-4 rounded-2xl font-black transition-all group ${activeTab === tab ? 'bg-indigo-600 text-white shadow-xl translate-x-1' : 'text-slate-500 hover:bg-slate-800 hover:text-white hover:translate-x-1'}`}
               >
-                <div className="flex items-center space-x-3">
-                  {TabIcons[tab]}
-                  <span className="capitalize">{tab === 'pos' ? 'Point of Sale' : tab}</span>
+                <div className="flex items-center space-x-4">
+                  <span className={`${activeTab === tab ? 'text-white' : 'text-slate-600 group-hover:text-indigo-400'}`}>{TabIcons[tab]}</span>
+                  <span className="capitalize text-[11px] uppercase tracking-widest">{tab === 'pos' ? 'Quick POS' : tab}</span>
                 </div>
-                {isLocked && (
-                  <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="opacity-40"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-                )}
+                {isLocked && <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="4" className="opacity-40"><rect width="18" height="11" x="3" y="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>}
               </button>
             );
           })}
         </nav>
-        <div className="p-4 border-t border-slate-800 space-y-3">
-          <div className="flex items-center space-x-3 p-3 bg-slate-800/50 rounded-xl">
-            <div className="w-8 h-8 rounded-full bg-indigo-500 flex items-center justify-center font-bold text-xs uppercase shadow-sm">AD</div>
+        <div className="p-6 border-t border-slate-800">
+          <div className="flex items-center space-x-4 p-4 bg-slate-800/30 rounded-[1.5rem] border border-slate-800/50">
+            <div className="w-10 h-10 rounded-full bg-indigo-500 flex items-center justify-center font-black text-xs shadow-inner">AD</div>
             <div className="flex-1 overflow-hidden">
-              <p className="text-xs font-black truncate uppercase tracking-tighter">Administrator</p>
-              <div className="flex items-center space-x-1">
-                <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full"></div>
-                <p className="text-[10px] text-emerald-400 font-bold uppercase tracking-widest">Local Drive Active</p>
+              <p className="text-[10px] font-black uppercase tracking-tighter truncate">Master Admin</p>
+              <div className="flex items-center space-x-1.5 mt-0.5">
+                <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse"></div>
+                <p className="text-[8px] text-emerald-400 font-black uppercase tracking-widest">Storage Link OK</p>
               </div>
-            </div>
-          </div>
-          <div className="px-3 flex items-center justify-between opacity-60">
-            <span className="text-[7px] font-black uppercase tracking-widest text-slate-400">Persistence Status</span>
-            <div className={`flex items-center space-x-1 px-1.5 py-0.5 rounded border ${isPersistent ? 'border-emerald-500/20 text-emerald-400' : 'border-amber-500/20 text-amber-400'}`}>
-               <span className="text-[7px] font-black uppercase">{isPersistent ? 'PERMANENT' : 'BEST EFFORT'}</span>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Main Content */}
-      <main className="flex-1 overflow-y-auto relative bg-slate-50">
-        <header className="h-16 bg-white border-b border-slate-200 px-8 flex items-center justify-between sticky top-0 z-20 backdrop-blur-md">
-          <h2 className="text-lg font-black text-black uppercase tracking-tight">{activeTab}</h2>
-          <div className="text-black text-[10px] font-black uppercase tracking-[0.2em]">
-            {new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}
+      <main className="flex-1 overflow-y-auto relative bg-slate-50 flex flex-col">
+        <header className="h-16 bg-white/80 border-b border-slate-200 px-10 flex items-center justify-between sticky top-0 z-20 backdrop-blur-xl">
+          <h2 className="text-xs font-black text-black uppercase tracking-[0.4em]">{activeTab}</h2>
+          <div className="text-black text-[10px] font-black uppercase tracking-widest opacity-40">
+            {new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
           </div>
         </header>
 
-        <div className="text-black">
+        <div className="flex-1">
           {activeTab === 'dashboard' && (
             <Dashboard 
               sales={sales} products={products} expenses={expenses} isDayClosed={currentShift?.isClosed || false}
@@ -234,29 +230,35 @@ const App: React.FC = () => {
           )}
           {activeTab === 'pos' && (
             <POS 
-              products={products} onUpdateProduct={handleUpdateProduct}
-              onCompleteSale={handleCompleteSale} isDayClosed={currentShift?.isClosed || false}
+              products={products} 
+              employees={employees}
+              onUpdateProduct={handleUpdateProduct}
+              onCompleteSale={handleCompleteSale} 
+              isDayClosed={currentShift?.isClosed || false}
+              settings={settings}
+              suspendedOrders={suspendedOrders}
+              onSuspendOrder={handleSuspendOrder}
+              onRecallOrder={handleRecallOrder}
             />
           )}
           {activeTab === 'inventory' && (
             <Inventory 
               products={products} 
-              onAddProduct={(p) => { setProducts(prev => [...prev, p]); store.saveProduct(p); logAction('PROD_ADD', `New: ${p.name}`); }} 
+              onAddProduct={(p) => { setProducts(prev => [...prev, p]); store.saveProduct(p); logAction('PROD_REG', `Cataloged: ${p.name}`); }} 
               onUpdateProduct={handleUpdateProduct} 
-              onDeleteProduct={(id) => { setProducts(prev => prev.filter(p => p.id !== id)); logAction('PROD_DEL', `ID: ${id}`, 'critical'); }} 
+              onDeleteProduct={(id) => { setProducts(prev => prev.filter(p => p.id !== id)); logAction('PROD_PURGE', `Deleted ID ${id}`, 'critical'); }} 
               adminPin={settings.adminPin}
             />
           )}
-          {activeTab === 'history' && <History sales={sales.slice(0, 100)} employees={employees} products={products} />}
+          {activeTab === 'history' && <History sales={sales} employees={employees} products={products} />}
           {activeTab === 'expenses' && <Expenses expenses={expenses} onAddExpense={handleAddExpense} onDeleteExpense={handleDeleteExpense} />}
-          {activeTab === 'cashup' && <CashUpView sales={sales} cashups={cashups} onAddCashUp={(c) => { setCashUps(prev => [c, ...prev]); store.saveCashUp(c); logAction('CASH_UP', `Reconciled with variance ${c.variance}`); }} />}
+          {activeTab === 'cashup' && <CashUpView sales={sales} cashups={cashups} onAddCashUp={(c) => { setCashUps(prev => [c, ...prev]); logAction('CASH_SETTLE', `Variance: ${c.variance}`, c.variance < 0 ? 'warning' : 'info'); }} />}
           {activeTab === 'reports' && <Reports sales={sales} settings={settings} />}
-          {activeTab === 'employees' && <Employees employees={employees} onUpdateEmployees={(es) => { setEmployees(es); store.saveEmployees(es); }} />}
-          {activeTab === 'settings' && <Settings settings={settings} onUpdateSettings={(s) => { setSettings(s); store.saveSettings(s); logAction('CONFIG_CHANGE', 'Settings updated'); }} sales={sales} products={products} expenses={expenses} cashups={cashups} employees={employees} onReloadData={initData} />}
+          {activeTab === 'employees' && <Employees employees={employees} onUpdateEmployees={(es) => { setEmployees(es); store.saveEmployees(es); logAction('STAFF_SYNC', 'Employee list updated'); }} />}
+          {activeTab === 'settings' && <Settings settings={settings} onUpdateSettings={(s) => { setSettings(s); store.saveSettings(s); logAction('SYS_CONFIG', 'Global parameters reset'); }} sales={sales} products={products} expenses={expenses} cashups={cashups} employees={employees} onReloadData={initData} />}
         </div>
       </main>
 
-      {/* Auth Modal (Gate) */}
       {showAuthModal && (
         <AuthModal 
           correctPin={settings.adminPin} 

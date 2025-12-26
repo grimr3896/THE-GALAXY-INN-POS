@@ -16,10 +16,10 @@ const History: React.FC<HistoryProps> = ({ sales, employees, products }) => {
   const [receiptSize, setReceiptSize] = useState<'xs' | 's' | 'm' | 'l'>('s');
 
   const sizeClasses = {
-    xs: 'text-[7px]',
-    s: 'text-[9px]',
-    m: 'text-[11px]',
-    l: 'text-[13px]'
+    xs: 'text-[8px]',
+    s: 'text-[10px]',
+    m: 'text-[12px]',
+    l: 'text-[14px]'
   };
 
   const calculateProfit = (sale: Sale) => {
@@ -116,7 +116,7 @@ const History: React.FC<HistoryProps> = ({ sales, employees, products }) => {
                       className="text-black hover:underline transition flex items-center justify-end space-x-1 uppercase text-[10px] tracking-widest font-black"
                     >
                       <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
-                      <span>Audit</span>
+                      <span>Receipt</span>
                     </button>
                   </td>
                 </tr>
@@ -148,7 +148,7 @@ const History: React.FC<HistoryProps> = ({ sales, employees, products }) => {
               ))}
             </div>
 
-            <div id="printable-history-receipt" className={`border-2 border-dashed border-black p-6 rounded-3xl bg-white font-mono leading-tight text-black print:border-none print:p-4 ${sizeClasses[receiptSize]}`}>
+            <div id="printable-customer-receipt" className={`border-2 border-dashed border-black p-6 rounded-3xl bg-white font-mono leading-tight text-black print:border-none print:p-4 ${sizeClasses[receiptSize]}`}>
               <div className="text-center mb-4">
                 <h2 className="text-xl font-black uppercase tracking-tighter">GALAXY INN</h2>
                 <div className="border-t border-black border-dashed my-2"></div>
@@ -156,7 +156,9 @@ const History: React.FC<HistoryProps> = ({ sales, employees, products }) => {
               </div>
               <div className="space-y-1 mb-4 font-bold">
                 <p>DATE: {new Date(selectedSale.timestamp).toLocaleDateString()}</p>
+                <p>TIME: {new Date(selectedSale.timestamp).toLocaleTimeString()}</p>
                 <p>TRANS: {selectedSale.id}</p>
+                <p>CASHIER: {getEmployeeName(selectedSale.cashierId)}</p>
               </div>
               <div className="space-y-2 mb-4">
                 {selectedSale.items.map((item, idx) => (
@@ -168,11 +170,23 @@ const History: React.FC<HistoryProps> = ({ sales, employees, products }) => {
               </div>
               <div className="border-t border-black border-dashed my-2"></div>
               <div className="flex justify-between font-black text-lg"><span>TOTAL:</span><span>KES {selectedSale.total.toLocaleString()}</span></div>
+              
+              {selectedSale.paymentMethod === 'cash' && (
+                <div className="mt-2 pt-2 border-t border-black border-dotted space-y-1 text-[10px] font-bold">
+                  <div className="flex justify-between"><span>TENDERED:</span><span>KES {selectedSale.amountReceived?.toLocaleString()}</span></div>
+                  <div className="flex justify-between"><span>BALANCE:</span><span>KES {selectedSale.changeGiven?.toLocaleString()}</span></div>
+                </div>
+              )}
+              
+              <div className="text-[9px] mt-2 opacity-60 uppercase font-bold">Paid via {selectedSale.paymentMethod}</div>
               <div className="text-center mt-6 pt-4 border-t border-black border-dashed font-bold uppercase tracking-widest">RECORDS AUDITED</div>
             </div>
             <div className="flex space-x-3 mt-8 print:hidden">
               <button onClick={() => setShowReceiptModal(false)} className="flex-1 py-4 bg-slate-100 text-black font-black rounded-2xl text-[10px] uppercase tracking-widest">Close</button>
-              <button onClick={() => window.print()} className="flex-2 py-4 bg-black text-white font-black rounded-2xl text-[10px] uppercase tracking-widest flex items-center justify-center space-x-2">Print Copy</button>
+              <button onClick={() => window.print()} className="flex-[2] py-4 bg-black text-white font-black rounded-2xl text-[10px] uppercase tracking-widest flex items-center justify-center space-x-2">
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect width="12" height="8" x="6" y="14"/></svg>
+                <span>Print Copy</span>
+              </button>
             </div>
           </div>
         </div>

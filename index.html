@@ -35,6 +35,28 @@
       input, select, textarea {
         color: #000000 !important;
       }
+
+      /* Print Optimization */
+      @media print {
+        body * {
+          visibility: hidden;
+        }
+        #printable-customer-receipt, #printable-customer-receipt * {
+          visibility: visible;
+        }
+        #printable-customer-receipt {
+          position: fixed;
+          left: 0;
+          top: 0;
+          width: 100%;
+          border: none !important;
+          padding: 0 !important;
+          margin: 0 !important;
+        }
+        .print-hidden {
+          display: none !important;
+        }
+      }
     </style>
 <script type="importmap">
 {

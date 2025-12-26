@@ -82,6 +82,7 @@ const Settings: React.FC<SettingsProps> = ({ settings, onUpdateSettings, sales, 
           <h2 className="text-3xl font-black text-black uppercase tracking-tighter">Computer Storage Config</h2>
           <p className="text-black font-bold text-xs uppercase tracking-widest mt-1 opacity-60">Manage your local physical database</p>
         </div>
+        <button onClick={() => onReloadData()} className="bg-slate-200 text-black px-6 py-4 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-slate-300 transition mr-2">Refresh App</button>
         <button onClick={() => onUpdateSettings(settings)} className="bg-black text-white px-10 py-4 rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl hover:bg-slate-800 transition">Save Changes</button>
       </div>
 
@@ -89,7 +90,7 @@ const Settings: React.FC<SettingsProps> = ({ settings, onUpdateSettings, sales, 
         <section className="space-y-6">
           <div className="flex items-center space-x-3 mb-2">
             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.1a2 2 0 0 1-1-1.72v-.51a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/></svg>
-            <h3 className="text-xl uppercase tracking-tight">Identity & Security</h3>
+            <h3 className="text-xl uppercase tracking-tight">Identity & Branding</h3>
           </div>
           <div className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-200 space-y-8">
             <div>
@@ -98,6 +99,34 @@ const Settings: React.FC<SettingsProps> = ({ settings, onUpdateSettings, sales, 
                 type="text" value={settings.storeName} 
                 onChange={(e) => onUpdateSettings({...settings, storeName: e.target.value})} 
                 className="w-full px-6 py-5 bg-slate-50 border border-slate-200 rounded-2xl outline-none font-black text-black focus:border-black transition uppercase" 
+              />
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-[10px] uppercase tracking-widest mb-3 opacity-40">Store Phone</label>
+                <input 
+                  type="text" value={settings.storePhone || ''} 
+                  onChange={(e) => onUpdateSettings({...settings, storePhone: e.target.value})} 
+                  className="w-full px-6 py-5 bg-slate-50 border border-slate-200 rounded-2xl outline-none font-black text-black focus:border-black transition" 
+                  placeholder="+254..."
+                />
+              </div>
+              <div>
+                <label className="block text-[10px] uppercase tracking-widest mb-3 opacity-40">VAT Rate (%)</label>
+                <input 
+                  type="number" value={settings.vatRate} 
+                  onChange={(e) => onUpdateSettings({...settings, vatRate: Number(e.target.value)})} 
+                  className="w-full px-6 py-5 bg-slate-50 border border-slate-200 rounded-2xl outline-none font-black text-black focus:border-black transition" 
+                />
+              </div>
+            </div>
+            <div>
+              <label className="block text-[10px] uppercase tracking-widest mb-3 opacity-40">Physical Address</label>
+              <textarea 
+                value={settings.storeAddress || ''} 
+                onChange={(e) => onUpdateSettings({...settings, storeAddress: e.target.value})} 
+                className="w-full px-6 py-5 bg-slate-50 border border-slate-200 rounded-2xl outline-none font-black text-black focus:border-black transition h-24" 
+                placeholder="Location details..."
               />
             </div>
             <div>

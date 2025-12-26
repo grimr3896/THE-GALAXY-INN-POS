@@ -49,6 +49,8 @@ export const INITIAL_EMPLOYEES: Employee[] = [
 
 export const INITIAL_SETTINGS: AppSettings = {
   storeName: 'Galaxy Inn',
+  storePhone: '+254 700 000000',
+  storeAddress: 'Outer Ring Road, Nairobi',
   adminPin: '1234',
   lockedTabs: [],
   webhookUrl: '',
