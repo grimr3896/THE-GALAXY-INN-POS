@@ -1,6 +1,12 @@
 
 export type Tab = 'dashboard' | 'pos' | 'inventory' | 'history' | 'expenses' | 'cashup' | 'reports' | 'employees' | 'settings';
 
+export interface DrumPourOption {
+  label: string;
+  volume: number; // in ml
+  price: number;
+}
+
 export interface Product {
   id: string;
   name: string;
@@ -8,7 +14,7 @@ export interface Product {
   image: string;
   buyPrice: number;
   sellPrice: number;
-  drumPrices?: { [key: string]: number };
+  drumPours?: DrumPourOption[];
   stock: number;
   capacity?: number;
   currentLevel?: number;
@@ -31,6 +37,9 @@ export interface Sale {
   items: SaleItem[];
   total: number;
   paymentMethod: 'cash' | 'card' | 'm-pesa' | 'split';
+  status: 'issued' | 'settled'; 
+  settledAt?: number;
+  tableNumber?: string;
   amountReceived?: number;
   changeGiven?: number;
   splitBreakdown?: {
@@ -38,7 +47,7 @@ export interface Sale {
     mpesa: number;
     card: number;
   };
-  cashierId: string;
+  cashierId: string; 
   vatAmount?: number;
 }
 
@@ -54,12 +63,12 @@ export interface Receipt {
   id: string;
   saleId: string;
   timestamp: number;
-  content: string; // Pre-rendered or structured receipt data
+  content: string; 
   total: number;
 }
 
 export interface DaySnapshot {
-  id: string; // ISO Date YYYY-MM-DD
+  id: string; 
   timestamp: number;
   totalSales: number;
   paymentBreakdown: {

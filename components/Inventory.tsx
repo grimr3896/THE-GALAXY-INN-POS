@@ -1,6 +1,6 @@
 
 import React, { useState, useRef } from 'react';
-import { Product } from '../types';
+import { Product, DrumPourOption } from '../types';
 import AuthModal from './AuthModal';
 
 interface InventoryProps {
@@ -20,14 +20,12 @@ const Inventory: React.FC<InventoryProps> = ({ products, onAddProduct, onUpdateP
   const [category, setCategory] = useState<'bottle' | 'drum'>('bottle');
   const [image, setImage] = useState('');
   const [buyPrice, setBuyPrice] = useState(0);
+  const [sellPrice, setSellPrice] = useState(0);
   const [stock, setStock] = useState(0);
   const [capacityLiters, setCapacityLiters] = useState(50);
   const [minThreshold, setMinThreshold] = useState(10);
   
-  const [price1L, setPrice1L] = useState(0);
-  const [price05L, setPrice05L] = useState(0);
-  const [price025L, setPrice025L] = useState(0);
-  const [sellPrice, setSellPrice] = useState(0);
+  const [drumPours, setDrumPours] = useState<DrumPourOption[]>([]);
 
   const [showAuth, setShowAuth] = useState(false);
   const [pendingAction, setPendingAction] = useState<(() => void) | null>(null);
@@ -41,9 +39,7 @@ const Inventory: React.FC<InventoryProps> = ({ products, onAddProduct, onUpdateP
     setStock(0);
     setCapacityLiters(50);
     setMinThreshold(10);
-    setPrice1L(0);
-    setPrice05L(0);
-    setPrice025L(0);
+    setDrumPours([]);
     setEditingProduct(null);
   };
 
@@ -56,6 +52,20 @@ const Inventory: React.FC<InventoryProps> = ({ products, onAddProduct, onUpdateP
       };
       reader.readAsDataURL(file);
     }
+  };
+
+  const handleAddPour = () => {
+    setDrumPours([...drumPours, { label: '', volume: 0, price: 0 }]);
+  };
+
+  const updatePour = (index: number, field: keyof DrumPourOption, value: any) => {
+    const newPours = [...drumPours];
+    newPours[index] = { ...newPours[index], [field]: value };
+    setDrumPours(newPours);
+  };
+
+  const removePour = (index: number) => {
+    setDrumPours(drumPours.filter((_, i) => i !== index));
   };
 
   const handleSave = (e: React.FormEvent) => {
@@ -78,11 +88,7 @@ const Inventory: React.FC<InventoryProps> = ({ products, onAddProduct, onUpdateP
       capacity: capacityML,
       currentLevel: category === 'drum' ? (editingProduct?.currentLevel ?? capacityML) : undefined,
       minThreshold: Number(minThreshold) || 0,
-      drumPrices: category === 'drum' ? {
-        '0.25L': Number(price025L) || 0,
-        '0.5L': Number(price05L) || 0,
-        '1.0L': Number(price1L) || 0
-      } : undefined
+      drumPours: category === 'drum' ? drumPours.filter(dp => dp.label && dp.price > 0) : undefined
     };
 
     if (editingProduct) {
@@ -117,11 +123,7 @@ const Inventory: React.FC<InventoryProps> = ({ products, onAddProduct, onUpdateP
       setStock(p.stock);
       setCapacityLiters((p.capacity || 50000) / 1000);
       setMinThreshold(p.minThreshold);
-      if (p.drumPrices) {
-        setPrice1L(p.drumPrices['1.0L'] || 0);
-        setPrice05L(p.drumPrices['0.5L'] || 0);
-        setPrice025L(p.drumPrices['0.25L'] || 0);
-      }
+      setDrumPours(p.drumPours || []);
       setShowForm(true);
     });
   };
@@ -174,7 +176,7 @@ const Inventory: React.FC<InventoryProps> = ({ products, onAddProduct, onUpdateP
                   <td className="px-8 py-5">
                     <div className="text-[10px] font-black space-y-0.5">
                       <div className="flex space-x-2"><span className="opacity-30 w-8">COST:</span> <span className="text-red-700">KSH {p.buyPrice.toLocaleString()}</span></div>
-                      <div className="flex space-x-2"><span className="opacity-30 w-8">SRP:</span> <span className="text-emerald-700">KSH {(p.category === 'bottle' ? p.sellPrice : p.drumPrices?.['1.0L'] || 0).toLocaleString()}</span></div>
+                      <div className="flex space-x-2"><span className="opacity-30 w-8">SRP:</span> <span className="text-emerald-700">KSH {(p.category === 'bottle' ? p.sellPrice : (p.drumPours?.[0]?.price || 0)).toLocaleString()}</span></div>
                     </div>
                   </td>
                   <td className="px-8 py-5">
@@ -207,8 +209,8 @@ const Inventory: React.FC<InventoryProps> = ({ products, onAddProduct, onUpdateP
 
       {showForm && (
         <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
-          <form onSubmit={handleSave} className="bg-white rounded-[2.5rem] w-full max-w-sm shadow-2xl p-8 animate-in zoom-in-95 duration-200 border border-slate-100 max-h-[90vh] overflow-y-auto scrollbar-hide">
-            <div className="flex justify-between items-center mb-6">
+          <form onSubmit={handleSave} className="bg-white rounded-[2.5rem] w-full max-w-lg shadow-2xl p-10 animate-in zoom-in-95 duration-200 border border-slate-100 max-h-[90vh] overflow-y-auto scrollbar-hide">
+            <div className="flex justify-between items-center mb-8">
               <h3 className="text-2xl font-black text-black uppercase tracking-tighter">
                 {editingProduct ? 'Update Asset' : 'Register Asset'}
               </h3>
@@ -217,15 +219,16 @@ const Inventory: React.FC<InventoryProps> = ({ products, onAddProduct, onUpdateP
               </button>
             </div>
             
-            <div className="space-y-5">
+            <div className="space-y-6">
               <div 
-                className="w-full h-32 bg-slate-50 border-2 border-dashed border-slate-200 rounded-[1.5rem] flex items-center justify-center cursor-pointer overflow-hidden group hover:border-black transition-all relative"
+                className="w-full h-40 bg-slate-50 border-2 border-dashed border-slate-200 rounded-[2rem] flex items-center justify-center cursor-pointer overflow-hidden group hover:border-black transition-all relative shadow-inner"
                 onClick={() => fileInputRef.current?.click()}
               >
                 {image ? (
                   <img src={image} className="w-full h-full object-cover" />
                 ) : (
                   <div className="text-center opacity-20">
+                    <svg className="mx-auto mb-2" xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>
                     <p className="text-[10px] font-black uppercase tracking-widest">Upload Identity</p>
                   </div>
                 )}
@@ -236,7 +239,7 @@ const Inventory: React.FC<InventoryProps> = ({ products, onAddProduct, onUpdateP
                 <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Asset Nomenclature</label>
                 <input 
                   type="text" value={name} onChange={(e) => setName(e.target.value)}
-                  className="w-full px-5 py-4 bg-slate-50 border-none rounded-2xl outline-none font-black text-black uppercase text-xs focus:ring-2 focus:ring-slate-100 transition"
+                  className="w-full px-5 py-4 bg-slate-50 border-none rounded-2xl outline-none font-black text-black uppercase text-xs focus:ring-2 focus:ring-slate-100 transition shadow-inner"
                   placeholder="E.G. JAMESON 750ML"
                 />
               </div>
@@ -246,7 +249,7 @@ const Inventory: React.FC<InventoryProps> = ({ products, onAddProduct, onUpdateP
                   <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Classification</label>
                   <select 
                     value={category} onChange={(e) => setCategory(e.target.value as any)}
-                    className="w-full px-5 py-4 bg-slate-50 border-none rounded-2xl outline-none font-black text-black uppercase text-[10px] appearance-none cursor-pointer focus:ring-2 focus:ring-slate-100"
+                    className="w-full px-5 py-4 bg-slate-50 border-none rounded-2xl outline-none font-black text-black uppercase text-[10px] appearance-none cursor-pointer focus:ring-2 focus:ring-slate-100 shadow-inner"
                   >
                     <option value="bottle">Inventory (Unit)</option>
                     <option value="drum">Bulk (Volume)</option>
@@ -256,7 +259,7 @@ const Inventory: React.FC<InventoryProps> = ({ products, onAddProduct, onUpdateP
                   <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Alert Floor</label>
                   <input 
                     type="number" value={minThreshold || ''} onChange={(e) => setMinThreshold(Number(e.target.value))} 
-                    className="w-full px-5 py-4 bg-slate-50 border-none rounded-2xl outline-none font-black text-black text-xs"
+                    className="w-full px-5 py-4 bg-slate-50 border-none rounded-2xl outline-none font-black text-black text-xs shadow-inner"
                   />
                 </div>
               </div>
@@ -265,7 +268,7 @@ const Inventory: React.FC<InventoryProps> = ({ products, onAddProduct, onUpdateP
                 <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Cost Per Purchase (KSH)</label>
                 <input 
                   type="number" value={buyPrice || ''} onChange={(e) => setBuyPrice(Number(e.target.value))} 
-                  className="w-full px-5 py-4 bg-slate-50 border-none rounded-2xl outline-none font-black text-black text-xs" 
+                  className="w-full px-5 py-4 bg-slate-50 border-none rounded-2xl outline-none font-black text-black text-xs shadow-inner" 
                 />
               </div>
 
@@ -275,45 +278,75 @@ const Inventory: React.FC<InventoryProps> = ({ products, onAddProduct, onUpdateP
                     <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Unit Selling Price</label>
                     <input 
                       type="number" value={sellPrice || ''} onChange={(e) => setSellPrice(Number(e.target.value))} 
-                      className="w-full px-5 py-4 bg-slate-50 border-none rounded-2xl outline-none font-black text-black text-xs" 
+                      className="w-full px-5 py-4 bg-slate-50 border-none rounded-2xl outline-none font-black text-black text-xs shadow-inner" 
                     />
                   </div>
                   <div>
                     <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Physical Stock Count</label>
                     <input 
                       type="number" value={stock || ''} onChange={(e) => setStock(Number(e.target.value))} 
-                      className="w-full px-5 py-4 bg-slate-50 border-none rounded-2xl outline-none font-black text-black text-xs" 
+                      className="w-full px-5 py-4 bg-slate-50 border-none rounded-2xl outline-none font-black text-black text-xs shadow-inner" 
                     />
                   </div>
                 </>
               ) : (
-                <div className="space-y-4 pt-2 border-t border-slate-100">
-                  <p className="text-[10px] font-black uppercase tracking-widest text-center opacity-60">Bulk Pour Valuations</p>
-                  <div className="grid grid-cols-1 gap-3">
-                    <div className="flex items-center space-x-3">
-                      <span className="text-[10px] w-16 opacity-40 uppercase">1.0L KSH</span>
-                      <input type="number" value={price1L || ''} onChange={(e) => setPrice1L(Number(e.target.value))} className="flex-1 px-4 py-3 bg-slate-50 rounded-xl outline-none font-black text-xs" placeholder="0" />
-                    </div>
-                    <div className="flex items-center space-x-3">
-                      <span className="text-[10px] w-16 opacity-40 uppercase">0.5L KSH</span>
-                      <input type="number" value={price05L || ''} onChange={(e) => setPrice05L(Number(e.target.value))} className="flex-1 px-4 py-3 bg-slate-50 rounded-xl outline-none font-black text-xs" placeholder="0" />
-                    </div>
-                    <div className="flex items-center space-x-3">
-                      <span className="text-[10px] w-16 opacity-40 uppercase">0.25L KSH</span>
-                      <input type="number" value={price025L || ''} onChange={(e) => setPrice025L(Number(e.target.value))} className="flex-1 px-4 py-3 bg-slate-50 rounded-xl outline-none font-black text-xs" placeholder="0" />
-                    </div>
+                <div className="space-y-4 pt-4 border-t border-slate-100">
+                  <div className="flex justify-between items-center mb-2">
+                    <p className="text-[10px] font-black uppercase tracking-widest opacity-60">Bulk Pour Valuations</p>
+                    <button 
+                      type="button" 
+                      onClick={handleAddPour}
+                      className="text-[9px] font-black uppercase tracking-widest text-indigo-600 hover:underline"
+                    >
+                      + Add Valuation
+                    </button>
                   </div>
-                  <div>
+                  
+                  <div className="space-y-3">
+                    {drumPours.map((pour, index) => (
+                      <div key={index} className="flex items-center space-x-2 bg-slate-50 p-3 rounded-2xl shadow-inner border border-slate-100 group animate-in slide-in-from-left-2">
+                        <input 
+                          type="text" placeholder="Label (Shot)" value={pour.label} 
+                          onChange={(e) => updatePour(index, 'label', e.target.value)}
+                          className="w-24 bg-transparent border-none outline-none font-black text-[10px] uppercase placeholder:opacity-30"
+                        />
+                        <div className="flex-1 flex items-center space-x-1 border-x border-slate-200 px-2">
+                          <input 
+                            type="number" placeholder="ML" value={pour.volume || ''} 
+                            onChange={(e) => updatePour(index, 'volume', Number(e.target.value))}
+                            className="w-full bg-transparent border-none outline-none font-black text-[10px] placeholder:opacity-30"
+                          />
+                          <span className="text-[8px] opacity-20">ML</span>
+                        </div>
+                        <div className="flex-1 flex items-center space-x-1 pr-2">
+                          <span className="text-[8px] opacity-20">KSH</span>
+                          <input 
+                            type="number" placeholder="Price" value={pour.price || ''} 
+                            onChange={(e) => updatePour(index, 'price', Number(e.target.value))}
+                            className="w-full bg-transparent border-none outline-none font-black text-[10px] placeholder:opacity-30"
+                          />
+                        </div>
+                        <button type="button" onClick={() => removePour(index)} className="text-red-400 hover:text-red-700 transition">
+                          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+                        </button>
+                      </div>
+                    ))}
+                    {drumPours.length === 0 && (
+                      <p className="text-[9px] text-center italic opacity-30 py-4 uppercase tracking-widest">No custom pours defined.</p>
+                    )}
+                  </div>
+
+                  <div className="mt-4">
                     <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Vessel Capacity (Litres)</label>
                     <input 
                       type="number" value={capacityLiters || ''} onChange={(e) => setCapacityLiters(Number(e.target.value))} 
-                      className="w-full px-5 py-4 bg-slate-50 border-none rounded-2xl outline-none font-black text-black text-xs" 
+                      className="w-full px-5 py-4 bg-slate-50 border-none rounded-2xl outline-none font-black text-black text-xs shadow-inner" 
                     />
                   </div>
                 </div>
               )}
 
-              <button type="submit" className="w-full py-5 bg-black text-white font-black rounded-3xl text-[10px] uppercase tracking-[0.2em] shadow-xl hover:bg-slate-800 active:scale-95 transition-all">
+              <button type="submit" className="w-full py-5 bg-black text-white font-black rounded-[2rem] text-[10px] uppercase tracking-[0.2em] shadow-2xl hover:bg-slate-800 active:scale-95 transition-all mt-4">
                 {editingProduct ? 'Commit Changes' : 'Register in Catalog'}
               </button>
             </div>

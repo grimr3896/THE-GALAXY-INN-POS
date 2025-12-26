@@ -32,8 +32,14 @@
       ::-webkit-scrollbar-thumb:hover {
         background: #333333;
       }
+      
+      /* Improved Input Visibility Defaults */
       input, select, textarea {
-        color: #000000 !important;
+        color: inherit;
+      }
+      ::placeholder {
+        color: #64748b !important; /* slate-500 for better visibility */
+        opacity: 0.7;
       }
 
       /* Print Optimization */

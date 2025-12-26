@@ -29,12 +29,13 @@ export const INITIAL_PRODUCTS: Product[] = [
     image: 'https://picsum.photos/seed/whiskey/200',
     buyPrice: 15000,
     sellPrice: 0,
-    drumPrices: {
-      '50ml': 150,
-      '250ml': 600,
-      '500ml': 1100,
-      '1000ml': 2000
-    },
+    drumPours: [
+      { label: 'Single Shot', volume: 30, price: 150 },
+      { label: 'Double Shot', volume: 60, price: 280 },
+      { label: 'Glass (1/4L)', volume: 250, price: 600 },
+      { label: 'Half Litre', volume: 500, price: 1100 },
+      { label: 'Full Litre', volume: 1000, price: 2000 }
+    ],
     stock: 1,
     capacity: 50000,
     currentLevel: 35000,
